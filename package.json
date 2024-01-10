@@ -1,17 +1,17 @@
 {
   "name": "sas-lsp",
-  "displayName": "SAS",
-  "description": "Official SAS Language Extension for VS Code",
-  "version": "1.4.1",
+  "displayName": "SAS-argenx",
+  "description": "SAS Language Extension for VS Code with argenx customizations",
+  "version": "1.4.10",
   "categories": [
     "Programming Languages",
     "Data Science",
     "Machine Learning",
     "Notebooks"
   ],
-  "publisher": "SAS",
+  "publisher": "SASargenx",
   "license": "Apache-2.0",
-  "icon": "icons/sas.png",
+  "icon": "icons/sas-argenx.png",
   "engines": {
     "vscode": "^1.73.0"
   },
