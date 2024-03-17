@@ -1,10 +1,12 @@
-// Copyright © 2022-2023, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
+// Copyright © 2022-2024, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { l10n } from "vscode";
 
 import { Client, ClientChannel, ConnectConfig } from "ssh2";
 
 import { BaseConfig, RunResult } from "..";
+import { updateStatusBarItem } from "../../components/StatusBarItem";
+import { extractOutputHtmlFileName } from "../../components/utils/sasCode";
 import { Session } from "../session";
 
 const endCode = "--vscode-sas-extension-submit-end--";
@@ -55,7 +57,7 @@ export class SSHSession extends Session {
     this._config = newValue;
   }
 
-  public setup = (): Promise<void> => {
+  protected establishConnection = (): Promise<void> => {
     return new Promise((pResolve, pReject) => {
       this.resolve = pResolve;
       this.reject = pReject;
@@ -168,6 +170,7 @@ export class SSHSession extends Session {
     this.html5FileName = "";
     this.timer = undefined;
     this.conn.end();
+    updateStatusBarItem(false);
   };
 
   private onStreamData = (data: Buffer): void => {
@@ -176,6 +179,7 @@ export class SSHSession extends Session {
     if (this.timer && output.endsWith("?")) {
       this.clearTimer();
       this.resolve?.();
+      updateStatusBarItem(true);
       return;
     }
 
@@ -189,10 +193,11 @@ export class SSHSession extends Session {
         this.getResult();
       }
       if (!(line.endsWith("?") || line.endsWith(">"))) {
-        this.html5FileName =
-          line.match(/NOTE: .+ HTML5.* Body .+: (.+)\.htm/)?.[1] ??
-          this.html5FileName;
-        this._onLogFn?.([{ type: "normal", line }]);
+        this.html5FileName = extractOutputHtmlFileName(
+          line,
+          this.html5FileName,
+        );
+        this._onExecutionLogFn?.([{ type: "normal", line }]);
       }
     });
   };
@@ -214,7 +219,11 @@ export class SSHSession extends Session {
     const resolvedEnv: string[] = ['_JAVA_OPTIONS="-Djava.awt.headless=true"'];
     const execArgs: string = resolvedEnv.join(" ");
 
-    const resolvedSasOpts: string[] = ["-nodms", "-terminal", "-nosyntaxcheck"];
+    const resolvedSasOpts: string[] = [
+      "-nodms",
+      "-noterminal",
+      "-nosyntaxcheck",
+    ];
 
     if (this._config.sasOptions?.length > 0) {
       resolvedSasOpts.push(...this._config.sasOptions);

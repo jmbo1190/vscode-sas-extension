@@ -1,4 +1,4 @@
-// Copyright © 2022-2023, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
+// Copyright © 2022-2024, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import {
   EventEmitter,
@@ -12,14 +12,23 @@ import {
 } from "vscode";
 import type { BaseLanguageClient } from "vscode-languageclient";
 
+import { showResult } from "../components/ResultPanel/ResultPanel";
+import {
+  appendExecutionLogFn,
+  appendSessionLogFn,
+} from "../components/logViewer";
 import {
   assign_SASProgramFile,
   wrapCodeWithOutputHtml,
-} from "../components/Helper/SasCodeHelper";
-import { isOutputHtmlEnabled } from "../components/Helper/SettingHelper";
-import { LogFn as LogChannelFn } from "../components/LogChannel";
-import { showResult } from "../components/ResultPanel";
-import { OnLogFn, RunResult, getSession } from "../connection";
+} from "../components/utils/sasCode";
+import { isOutputHtmlEnabled } from "../components/utils/settings";
+import {
+  ErrorRepresentation,
+  OnLogFn,
+  RunResult,
+  getSession,
+} from "../connection";
+import { useRunStore } from "../store";
 import { profileConfig, switchProfile } from "./profile";
 
 interface FoldingBlock {
@@ -29,7 +38,7 @@ interface FoldingBlock {
   endCol: number;
 }
 
-let running = false;
+const { setIsExecutingCode } = useRunStore.getState();
 
 function getCode(selected = false, uri?: Uri): string {
   const editor = uri
@@ -132,15 +141,10 @@ async function runCode(selected?: boolean, uri?: Uri) {
   const code = getCode(selected, uri);
 
   const session = getSession();
-  session.onLogFn = LogChannelFn;
+  session.onExecutionLogFn = appendExecutionLogFn;
+  session.onSessionLogFn = appendSessionLogFn;
 
-  await window.withProgress(
-    {
-      location: ProgressLocation.Notification,
-      title: l10n.t("Connecting to SAS session..."),
-    },
-    session.setup,
-  );
+  await session.setup();
 
   await window.withProgress(
     {
@@ -162,21 +166,19 @@ async function runCode(selected?: boolean, uri?: Uri) {
 }
 
 const _run = async (selected = false, uri?: Uri) => {
-  if (running) {
+  if (useRunStore.getState().isExecutingCode) {
     return;
   }
-  running = true;
+
+  setIsExecutingCode(true);
   commands.executeCommand("setContext", "SAS.running", true);
 
   await runCode(selected, uri)
     .catch((err) => {
-      console.dir(err);
-      window.showErrorMessage(
-        err.response?.data ? JSON.stringify(err.response.data) : err.message,
-      );
+      onRunError(err);
     })
     .finally(() => {
-      running = false;
+      setIsExecutingCode(false);
       commands.executeCommand("setContext", "SAS.running", false);
     });
 };
@@ -196,15 +198,16 @@ export async function runRegion(client: BaseLanguageClient): Promise<void> {
 }
 
 export function hasRunningTask() {
-  return running;
+  return useRunStore.getState().isExecutingCode;
 }
 export async function runTask(
   code: string,
   messageEmitter?: EventEmitter<string>,
   closeEmitter?: EventEmitter<number>,
   onLog?: OnLogFn,
+  onSessionLog?: OnLogFn,
 ): Promise<RunResult> {
-  if (running) {
+  if (useRunStore.getState().isExecutingCode) {
     return;
   }
 
@@ -213,7 +216,7 @@ export async function runTask(
     return;
   }
 
-  running = true;
+  setIsExecutingCode(true);
   commands.executeCommand("setContext", "SAS.running", true);
 
   let cancelled = false;
@@ -224,14 +227,54 @@ export async function runTask(
       await session.cancel();
     }
 
-    running = false;
+    setIsExecutingCode(false);
     commands.executeCommand("setContext", "SAS.running", false);
   });
-  session.onLogFn = onLog ?? LogChannelFn;
+  session.onExecutionLogFn = onLog ?? appendExecutionLogFn;
+  session.onSessionLogFn = onSessionLog ?? appendSessionLogFn;
 
   messageEmitter.fire(`${l10n.t("Connecting to SAS session...")}\r\n`);
-  !cancelled && (await session.setup());
+  !cancelled && (await session.setup(true));
 
   messageEmitter.fire(`${l10n.t("SAS code running...")}\r\n`);
   return cancelled ? undefined : session.run(code);
 }
+
+const isErrorRep = (err: unknown): err is ErrorRepresentation => {
+  if (
+    err &&
+    typeof err === "object" &&
+    "message" in err &&
+    "details" in err &&
+    Array.isArray(err.details) &&
+    "errorCode" in err
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const onRunError = (err) => {
+  console.dir(err);
+
+  if (err.response) {
+    // The request was made and we got a status code that falls out side of the 2xx range
+    const errorData = err.response.data;
+
+    if (isErrorRep(errorData)) {
+      //errorData is an error representation, extract out the details to show a better message
+      const details = errorData.details;
+      const options = {
+        modal: true,
+        detail: details.join("\n"),
+      };
+      window.showErrorMessage(errorData.message, options);
+    } else {
+      window.showErrorMessage(err.message);
+    }
+  } else {
+    // Either the request was made but no response was received, or
+    // there was an issue in the request setup itself, just show the message
+    window.showErrorMessage(err.message);
+  }
+};

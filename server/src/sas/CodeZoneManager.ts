@@ -808,6 +808,9 @@ export class CodeZoneManager {
       block = this._syntaxProvider.getFoldingBlock(
         tmpContext.line,
         tmpContext.col,
+        false,
+        true,
+        true,
       );
       if (block) {
         if (this._inBlock(block, token)! < 0 && !this._endedReally(block)) {
@@ -1332,8 +1335,8 @@ export class CodeZoneManager {
     return token.text[0] === "%"
       ? CodeZoneManager.ZONE_TYPE.MACRO_FUNC
       : this._syntaxDb.isSasFunction(token.text)
-      ? CodeZoneManager.ZONE_TYPE.SAS_FUNC
-      : CodeZoneManager.ZONE_TYPE.OBJECT;
+        ? CodeZoneManager.ZONE_TYPE.SAS_FUNC
+        : CodeZoneManager.ZONE_TYPE.OBJECT;
   }
   private _stmt(context: Context, stmt: { text: string }) {
     const ret = this._tryGetOpr(context);
@@ -1584,7 +1587,7 @@ export class CodeZoneManager {
         this._copyContext(tmpContext, context);
         tmpContext = this._cloneContext(context);
         next = this._getNextEx(tmpContext);
-        if (name.text === "(" || next.text === "(") {
+        if (next.text === "(") {
           this._emit(name, this._checkFuncType(name));
           name = { op: name, op1: this._argList(context, name) };
           tmpContext = this._cloneContext(context);
@@ -2428,7 +2431,13 @@ export class CodeZoneManager {
     const tmpLine = pos.line,
       tmpCol = pos.col;
     let token = this._token(tmpLine, tmpCol)!;
-    const block = this._syntaxProvider.getFoldingBlock(tmpLine, tmpCol);
+    const block = this._syntaxProvider.getFoldingBlock(
+      tmpLine,
+      tmpCol,
+      false,
+      true,
+      true,
+    );
     /* first check type to determine zone, some special conditions
      * 1) for bringing up auto completion popup by shortcut,
      * 2) input at the end of a line in comment or literal

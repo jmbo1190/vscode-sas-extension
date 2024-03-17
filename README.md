@@ -13,12 +13,14 @@ Welcome to the SAS Extension for Visual Studio Code! This extension provides sup
     - [Code Folding and Code Outline](#code-folding-and-code-outline)
     - [Configuring the SAS Extension](#configuring-the-sas-extension)
     - [Profiles](/connect-and-run.md/#profiles)
-      - [Profile Anatomy (Viya)](/connect-and-run.md/#profile-anatomy-sas-viya)
+      - [Profile Details (Viya)](/connect-and-run.md/#profile-sas-viya)
       - [Add New SAS Viya Profile](/connect-and-run.md#add-new-sas-viya-profile)
-      - [Profile Anatomy (SAS 9.4 Remote)](/connect-and-run.md/#profile-anatomy-sas-94-remote)
-      - [Add New SAS 9.4 Remote Profile](/connect-and-run.md#add-new-sas-94-remote-profile)
-      - [Profile Anatomy (SAS 9.4 Local)](/connect-and-run.md/#profile-anatomy-sas-94-local)
+      - [Profile Details (SAS 9.4 Remote SSH)](/connect-and-run.md/#profile-sas-94-remote---ssh)
+      - [Add New SAS 9.4 Remote SSH Profile](/connect-and-run.md#add-new-sas-94-remote---ssh-profile)
+      - [Profile Details (SAS 9.4 Local)](/connect-and-run.md/#profile-sas-94-local)
       - [Add New SAS 9.4 Local Profile](/connect-and-run.md/#add-new-sas-94-local-profile)
+      - [Profile Details (SAS 9.4 Remote IOM)](/connect-and-run.md/#profile-sas-94-remote---iom)
+      - [Add New SAS 9.4 Remote IOM Profile](/connect-and-run.md/#add-new-sas-94-remote---iom-profile)
       - [Delete SAS Profile](/connect-and-run.md#delete-connection-profile)
       - [Switch Current SAS Profile](/connect-and-run.md#switch-current-connection-profile)
       - [Update SAS Profile](/connect-and-run.md#update-connection-profile)
@@ -36,7 +38,7 @@ Welcome to the SAS Extension for Visual Studio Code! This extension provides sup
 
 ## Installation
 
-To install the SAS extension, open the Extensions view by clicking the Extensions icon in the Activity Bar on the left side of the Visual Studio Code window. Search for the 'Official' SAS extension, and click the Install button. Once the installation is complete, the Install button changes to the Manage button.
+Install latest VS Code (version 1.82 at minimum). To install the SAS extension, open the Extensions view by clicking the Extensions icon in the Activity Bar on the left side of the Visual Studio Code window. Search for the 'Official' SAS extension, and click the Install button. Once the installation is complete, the Install button changes to the Manage button.
 
 ## Features
 
@@ -184,6 +186,16 @@ Notebook is an interactive experience with Markdown, executable code snippets an
 - To toggle log or ODS output display, click `...` at the side of the output and select `Change Presentation`.
 - SAS Notebook can be saved to a `.sasnb` file, shared to others, and open in another VS Code window.
 
+### SAS Log
+
+Its possible to customize when the SAS log gets shown in the bottom panel by using the following extension settings. These settings will apply to all connection profiles:
+| Name | Description | Additional Notes |
+| ---------------------------------| --------------------------------------- | ----------------------------- |
+| **SAS.log.showOnExecutionStart** | Show SAS log on start of execution | default: true |
+| **SAS.log.showOnExecutionFinish**| Show SAS log on end of execution | default: true |
+
+To see an example, please refer to the [Viya4](doc/profileExamples/viya4.json) example profile.
+
 ## Support
 
 ### SAS Communities
@@ -192,7 +204,7 @@ Ask, Find, and Share on the VS Code SAS Extension on the [SAS Programmers Commun
 
 ### SAS Programming Documentation
 
-[SAS Programming documentation](https://go.documentation.sas.com/doc/en/pgmsascdc/9.4_3.5/lrcon/titlepage.htm)
+[SAS Programming documentation](https://go.documentation.sas.com/doc/en/pgmsascdc/v_048/lepg/titlepage.htm)
 
 ### FAQs
 

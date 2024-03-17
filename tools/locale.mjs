@@ -1,15 +1,23 @@
 import { readFileSync, writeFileSync } from "fs";
 import glob from "glob";
-import { dirname, join } from "path";
+import csv from "papaparse";
+import { dirname, isAbsolute, join } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packagePath = join(__dirname, "..");
 const l10nPath = join(__dirname, "..", "l10n");
+const csvPath = join(__dirname, "..");
+const defaultPackageNlsPath = join(packagePath, "package.nls.json");
 
 const newLocale = process.env.npm_config_new;
 const localeToUpdate = process.env.npm_config_update_locale;
 const updateAllLocales = process.env.npm_config_update_locales;
+const generateCSV = process.env.npm_config_generate_csv;
+const importCSV = process.env.npm_config_import_csv;
+
+const SOURCE_L10N = "l10n";
+const SOURCE_NLS = "nls";
 
 const sortKeys = (content) => {
   const contentJSON =
@@ -24,26 +32,147 @@ const sortKeys = (content) => {
   return JSON.stringify(orderedResults, null, "  ");
 };
 
-const packageNls = readFileSync(
-  join(packagePath, "package.nls.json"),
-).toString();
+const packageNls = readFileSync(defaultPackageNlsPath).toString();
 const l10nBundle = readFileSync(join(l10nPath, "bundle.l10n.json")).toString();
+
+const getMissingTranslations = (
+  newTranslationMap,
+  currentTranslationMap,
+  source,
+) =>
+  Object.entries(newTranslationMap)
+    .map(([key, value]) => {
+      if (currentTranslationMap[key]) {
+        return null;
+      }
+
+      return {
+        Term: key,
+        "English text": value,
+        Translation: "<add translation here>",
+        Source: source,
+      };
+    })
+    .filter((missingTranslation) => !!missingTranslation);
+
+const csvTranslationMap = (source) => {
+  if (!importCSV) {
+    return {};
+  }
+
+  const csvData = readFileSync(
+    // User can choose to read from an absolute path, or a relative path
+    isAbsolute(importCSV) ? importCSV : join(csvPath, importCSV),
+  ).toString();
+  const { data } = csv.parse(csvData);
+  const headers = data.shift();
+  const items = data
+    .map((itemArray) =>
+      itemArray.reduce(
+        (carry, value, idx) => ({
+          ...carry,
+          [headers[idx]]: value,
+        }),
+        {},
+      ),
+    )
+    .filter((item) => item.Source === source);
+
+  const translationMap = items.reduce(
+    (carry, value) => ({
+      ...carry,
+      [value.Term]: value.Translation,
+    }),
+    {},
+  );
+
+  return translationMap;
+};
+
+const omitMissingTerms = (newMap, translationSourceMap) =>
+  Object.keys(newMap).reduce((carry, translationKey) => {
+    if (translationSourceMap[translationKey]) {
+      return { ...carry, [translationKey]: newMap[translationKey] };
+    }
+    return carry;
+  }, {});
+
+const cleanupUnusedPackageKeys = (packageNlsJson) => {
+  const allFiles = glob.sync(`${packagePath}/**/*.{ts,json,tsx}`, {
+    ignore: [
+      "**/node_modules/**",
+      "**/package.nls.*",
+      "**/out/**",
+      "**/dist/**",
+      "**/l10n/**",
+      "**/*.test.{ts,tsx}",
+      "**/package-lock.json",
+    ],
+  });
+  const allFileContents = allFiles.map((filePath) =>
+    readFileSync(filePath).toString(),
+  );
+
+  return Object.keys(packageNlsJson).reduce((carry, term) => {
+    if (allFileContents.find((file) => file.includes(term))) {
+      return { ...carry, [term]: packageNlsJson[term] };
+    }
+
+    return carry;
+  }, {});
+};
 
 const updateLocale = (locale) => {
   const packageNlsPath = join(packagePath, `package.nls.${locale}.json`);
   const l10BundlePath = join(l10nPath, `bundle.l10n.${locale}.json`);
 
-  const currentPackageNlsJSON = {
-    ...JSON.parse(packageNls),
-    ...JSON.parse(readFileSync(packageNlsPath)),
-  };
-  const currentL10nBundleJSON = {
-    ...JSON.parse(l10nBundle),
-    ...JSON.parse(readFileSync(l10BundlePath)),
-  };
+  const newPackageNlsMap = cleanupUnusedPackageKeys(JSON.parse(packageNls));
+  const currentPackageNlsMap = JSON.parse(readFileSync(packageNlsPath));
+  const currentPackageNlsJSON = omitMissingTerms(
+    {
+      ...newPackageNlsMap,
+      ...currentPackageNlsMap,
+      ...csvTranslationMap(SOURCE_NLS),
+    },
+    newPackageNlsMap,
+  );
+
+  const newL10NBundleMap = JSON.parse(l10nBundle);
+  const currentL10NBundleMap = JSON.parse(readFileSync(l10BundlePath));
+  const currentL10nBundleJSON = omitMissingTerms(
+    {
+      ...newL10NBundleMap,
+      ...currentL10NBundleMap,
+      ...csvTranslationMap(SOURCE_L10N),
+    },
+    newL10NBundleMap,
+  );
 
   writeFileSync(packageNlsPath, sortKeys(currentPackageNlsJSON) + "\n");
   writeFileSync(l10BundlePath, sortKeys(currentL10nBundleJSON) + "\n");
+  writeFileSync(defaultPackageNlsPath, sortKeys(newPackageNlsMap) + "\n");
+
+  if (generateCSV) {
+    const csvEntries = getMissingTranslations(
+      newPackageNlsMap,
+      currentPackageNlsMap,
+      SOURCE_NLS,
+    ).concat(
+      getMissingTranslations(
+        newL10NBundleMap,
+        currentL10NBundleMap,
+        SOURCE_L10N,
+      ),
+    );
+
+    if (csvEntries.length > 0) {
+      writeFileSync(
+        // User can choose to write to an absolute path, or use a relative path
+        isAbsolute(generateCSV) ? generateCSV : join(csvPath, generateCSV),
+        csv.unparse(csvEntries),
+      );
+    }
+  }
 };
 
 if (newLocale) {

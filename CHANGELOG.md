@@ -4,6 +4,79 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). If you introduce breaking changes, please group them together in the "Changed" section using the **BREAKING:** prefix.
 
+## [Unreleased]
+
+### Changed
+
+- Update command palette entry `SAS: Sign in` so that it's only visible for Viya profiles. Non-viya users will still be able to connect and execute code by using the running man icon ([#862](https://github.com/sassoftware/vscode-sas-extension/pull/862))
+
+## [v1.7.1] - 2024-02-15
+
+### Fixed
+
+- Fixed an issue where users were not able to add new profiles if starting with no profiles ([#826](https://github.com/sassoftware/vscode-sas-extension/pull/826))
+
+### Added
+
+- Add Spanish translation ([#749](https://github.com/sassoftware/vscode-sas-extension/pull/749))
+
+## [v1.7.0] - 2024-02-08
+
+### Added
+
+- Support formatting SAS code ([#681](https://github.com/sassoftware/vscode-sas-extension/pull/681))
+- Added extra settings options to customize when SAS log is shown ([#713](https://github.com/sassoftware/vscode-sas-extension/pull/713))
+- Improved function autocomplete ([#724](https://github.com/sassoftware/vscode-sas-extension/pull/724))
+
+### Fixed
+
+- Unexpected indentation when paste ([#735](https://github.com/sassoftware/vscode-sas-extension/issues/735))
+- The "Close Session" menu is no longer available after saving any changes to the `settings.json` file ([#745](https://github.com/sassoftware/vscode-sas-extension/issues/745))
+- Error message for connection error need to be externalized ([#734](https://github.com/sassoftware/vscode-sas-extension/issues/734))
+- I18n node names when converting SAS Notebook to SAS Flow ([#530](https://github.com/sassoftware/vscode-sas-extension/issues/530))
+- Ending inner block properly inside macro ([#772](https://github.com/sassoftware/vscode-sas-extension/issues/772))
+
+## [v1.6.0] - 2024-01-15
+
+### Added
+
+- Added the ability to upload and download sas content using the context menu ([#547](https://github.com/sassoftware/vscode-sas-extension/issues/547))
+- Added the ability to download results as an html file ([#546](https://github.com/sassoftware/vscode-sas-extension/issues/546))
+- Added sas 9.4 remote connection support via ITC and the IOM Bridge protocol ([#592](https://github.com/sassoftware/vscode-sas-extension/pull/592))
+- Support recursive folding block ([#555](https://github.com/sassoftware/vscode-sas-extension/pull/555))
+- Added `Close Session` button on the tooltip of the active profile status bar item ([#573](https://github.com/sassoftware/vscode-sas-extension/pull/573))
+- Support function signature help ([#626](https://github.com/sassoftware/vscode-sas-extension/pull/626))
+- Added `ods graphics on;` to the wrapper code ([#648](https://github.com/sassoftware/vscode-sas-extension/pull/648))
+- Japanese translation ([#597](https://github.com/sassoftware/vscode-sas-extension/pull/597))
+- French translation ([#634](https://github.com/sassoftware/vscode-sas-extension/pull/634))
+- Italian translation ([#654](https://github.com/sassoftware/vscode-sas-extension/pull/654))
+
+### Changed
+
+- Required VS Code version 1.82 at minimum
+- Removed the disconnect button from the editor toolbar (next to the run button), Please use the `Close Session` button on the tooltip of the active profile status bar item instead. ([#573](https://github.com/sassoftware/vscode-sas-extension/pull/573))
+
+### Fixed
+
+- ODS display image inline ([#471](https://github.com/sassoftware/vscode-sas-extension/issues/471))
+- sasnb extension name for save ([#607](https://github.com/sassoftware/vscode-sas-extension/issues/607))
+- document symbol error ([#715](https://github.com/sassoftware/vscode-sas-extension/issues/715))
+
+## [v1.5.0] - 2023-10-27
+
+### Added
+
+- Allow dragging sas content into editor ([#510](https://github.com/sassoftware/vscode-sas-extension/pull/510))
+- Added the ability to use `Convert to flow...` for sas notebooks in the local filesystem ([#552](https://github.com/sassoftware/vscode-sas-extension/pull/552))
+- Add Portuguese (Brazil) translation ([#529](https://github.com/sassoftware/vscode-sas-extension/pull/529))
+- Add Korean translation ([#566](https://github.com/sassoftware/vscode-sas-extension/pull/566))
+- Assign `_SASPROGRAMFILE` macro-variable to path of submitted SAS notebook code ([#551](https://github.com/sassoftware/vscode-sas-extension/pull/551))
+
+### Fixed
+
+- Target display issue for local profile ([#514](https://github.com/sassoftware/vscode-sas-extension/issues/514))
+- Check for failed state during session log stream to prevent unbounded loop ([#562](https://github.com/sassoftware/vscode-sas-extension/issues/562))
+
 ## [v1.4.1] - 2023-09-29
 
 ### Fixed

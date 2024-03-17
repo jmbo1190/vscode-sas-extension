@@ -1,4 +1,4 @@
-import { AxiosResponse } from "axios";
+import { AxiosHeaders, AxiosResponse } from "axios";
 import { expect } from "chai";
 
 import PaginatedResultSet from "../../../src/components/LibraryNavigator/PaginatedResultSet";
@@ -7,7 +7,9 @@ const axiosResponseDefaults = {
   status: 200,
   statusText: "OK",
   headers: {},
-  config: {},
+  config: {
+    headers: new AxiosHeaders(),
+  },
 };
 
 describe("PaginatedResultSet", async function () {
@@ -21,17 +23,12 @@ describe("PaginatedResultSet", async function () {
       },
     };
 
-    const transformData = (response: AxiosResponse) => ({
-      test: response.data.test,
-    });
-
     const paginatedResultSet = new PaginatedResultSet(
       async () => mockAxiosResponse,
-      transformData,
     );
 
-    expect(await paginatedResultSet.getData(0, 100)).to.deep.equal({
-      test: "yes",
-    });
+    expect(await paginatedResultSet.getData(0, 100)).to.deep.equal(
+      mockAxiosResponse,
+    );
   });
 });

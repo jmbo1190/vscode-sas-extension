@@ -1,4 +1,4 @@
-// Copyright © 2022-2023, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
+// Copyright © 2022-2024, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { authentication, l10n } from "vscode";
 
@@ -8,6 +8,7 @@ import {
   getContextValue,
   setContextValue,
 } from "../../components/ExtensionContext";
+import { updateStatusBarItem } from "../../components/StatusBarItem";
 import { Session } from "../session";
 import { ContextsApi, SessionsApi } from "./api/compute";
 import { ComputeState, getApiConfig } from "./common";
@@ -38,7 +39,7 @@ class RestSession extends Session {
     this._config = value;
   }
 
-  public setup = async (): Promise<void> => {
+  protected establishConnection = async (): Promise<void> => {
     const apiConfig = getApiConfig();
     let formattedOpts: string[] = [];
     const autoExecLines = this._config.autoExecLines || [];
@@ -85,6 +86,7 @@ class RestSession extends Session {
     if (this._computeSession) {
       //reconnected to a running session, so just return
       await this.printSessionLog(this._computeSession);
+      updateStatusBarItem(true);
       return;
     }
 
@@ -133,6 +135,7 @@ class RestSession extends Session {
 
     //Save the current sessionId
     setContextValue("SAS.sessionId", this._computeSession.sessionId);
+    updateStatusBarItem(true);
   };
 
   public run = async (code: string) => {
@@ -193,6 +196,7 @@ class RestSession extends Session {
 
       //Since the session is being closed, remove the cached session id
       setContextValue("SAS.sessionId", undefined);
+      updateStatusBarItem(false);
     }
   };
 
@@ -286,7 +290,9 @@ class RestSession extends Session {
   private printJobLog = async (job: ComputeJob) => {
     const logs = await job.getLogStream();
     for await (const log of logs) {
-      this._onLogFn(log);
+      if (log?.length > 0) {
+        this._onExecutionLogFn(log);
+      }
     }
   };
 
@@ -295,10 +301,10 @@ class RestSession extends Session {
    * @param session a session id to print logs for.
    */
   private printSessionLog = async (session: ComputeSession) => {
-    if (this._onLogFn) {
-      const logs = await session.getLogStream();
-      for await (const log of logs) {
-        this._onLogFn(log);
+    const logs = await session.getLogStream();
+    for await (const log of logs) {
+      if (log?.length > 0 && this._onSessionLogFn) {
+        this._onSessionLogFn(log);
       }
     }
   };

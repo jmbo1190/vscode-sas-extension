@@ -2,7 +2,7 @@
   "name": "sas-lsp",
   "displayName": "SAS",
   "description": "Official SAS Language Extension for VS Code",
-  "version": "1.4.1",
+  "version": "1.7.1",
   "categories": [
     "Programming Languages",
     "Data Science",
@@ -13,7 +13,7 @@
   "license": "Apache-2.0",
   "icon": "icons/sas.png",
   "engines": {
-    "vscode": "^1.73.0"
+    "vscode": "^1.82.0"
   },
   "activationEvents": [
     "onLanguage:sas",
@@ -170,7 +170,8 @@
                       "enum": [
                         "rest",
                         "ssh",
-                        "com"
+                        "com",
+                        "iom"
                       ]
                     },
                     "sasOptions": {
@@ -327,6 +328,41 @@
                       "if": {
                         "properties": {
                           "connectionType": {
+                            "const": "iom"
+                          }
+                        }
+                      },
+                      "then": {
+                        "required": [
+                          "host",
+                          "username",
+                          "port"
+                        ],
+                        "properties": {
+                          "host": {
+                            "type": "string",
+                            "default": "",
+                            "description": "%configuration.SAS.connectionProfiles.profiles.iom.host%"
+                          },
+                          "username": {
+                            "type": "string",
+                            "default": "",
+                            "description": "%configuration.SAS.connectionProfiles.profiles.iom.username%"
+                          },
+                          "port": {
+                            "type": "number",
+                            "default": 8591,
+                            "description": "%configuration.SAS.connectionProfiles.profiles.iom.port%",
+                            "exclusiveMinimum": 1,
+                            "exclusiveMaximum": 65535
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "connectionType": {
                             "const": "com"
                           }
                         }
@@ -408,6 +444,7 @@
             "description": "%configuration.SAS.results.html.style%"
           },
           "SAS.flowConversionMode": {
+            "order": 6,
             "type": "string",
             "default": "Swimlane",
             "enum": [
@@ -419,13 +456,27 @@
               "%configuration.SAS.flowConversionModeSwimlane%",
               "%configuration.SAS.flowConversionModeNode%"
             ]
+          },
+          "SAS.log.showOnExecutionStart": {
+            "order": 7,
+            "type": "boolean",
+            "default": true,
+            "description": "%configuration.SAS.log.showOnExecutionStart%"
+          },
+          "SAS.log.showOnExecutionFinish": {
+            "order": 8,
+            "type": "boolean",
+            "default": true,
+            "description": "%configuration.SAS.log.showOnExecutionFinish%"
           }
         }
       }
     ],
     "configurationDefaults": {
       "[sas]": {
-        "editor.formatOnType": true
+        "editor.formatOnType": true,
+        "editor.formatOnPaste": true,
+        "editor.defaultFormatter": "SAS.sas-lsp"
       }
     },
     "commands": [
@@ -577,6 +628,37 @@
         "shortTitle": "%commands.SAS.notebook.new.short%",
         "title": "%commands.SAS.notebook.new%",
         "category": "SAS Notebook"
+      },
+      {
+        "command": "SAS.file.new",
+        "shortTitle": "%commands.SAS.file.new.short%",
+        "title": "%commands.SAS.file.new%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.downloadResource",
+        "title": "%commands.SAS.download%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.uploadResource",
+        "title": "%commands.SAS.upload%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.uploadFileResource",
+        "title": "%commands.SAS.uploadFiles%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.uploadFolderResource",
+        "title": "%commands.SAS.uploadFolders%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.saveHTML",
+        "title": "%commands.SAS.download%",
+        "category": "SAS"
       }
     ],
     "keybindings": [
@@ -592,6 +674,12 @@
       }
     ],
     "menus": {
+      "webview/context": [
+        {
+          "command": "SAS.saveHTML",
+          "when": "webviewId =~ /SASResultPanel-/"
+        }
+      ],
       "view/title": [
         {
           "command": "SAS.refreshContent",
@@ -612,6 +700,13 @@
           "command": "SAS.collapseAllLibraries",
           "when": "view == librarydataprovider",
           "group": "navigation@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "SAS.convertNotebookToFlow",
+          "when": "resourceExtname == .sasnb && SAS.connectionType == rest && !SAS.connection.direct",
+          "group": "actionsgroup@0"
         }
       ],
       "view/item/context": [
@@ -669,6 +764,26 @@
           "command": "SAS.emptyRecycleBin",
           "when": "viewItem =~ /empty/ && view == contentdataprovider",
           "group": "emptygroup@0"
+        },
+        {
+          "command": "SAS.downloadResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider",
+          "group": "uploaddownloadgroup@0"
+        },
+        {
+          "command": "SAS.uploadResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider && !listMultiSelection && workspacePlatform == mac",
+          "group": "uploaddownloadgroup@1"
+        },
+        {
+          "command": "SAS.uploadFileResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider && !listMultiSelection && workspacePlatform != mac",
+          "group": "uploaddownloadgroup@1"
+        },
+        {
+          "command": "SAS.uploadFolderResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider && !listMultiSelection && workspacePlatform != mac",
+          "group": "uploaddownloadgroup@1"
         }
       ],
       "editor/title/run": [
@@ -694,13 +809,6 @@
           "group": "navigation@3"
         }
       ],
-      "editor/title": [
-        {
-          "when": "editorLangId == sas",
-          "command": "SAS.close",
-          "group": "navigation"
-        }
-      ],
       "commandPalette": [
         {
           "when": "editorLangId == sas && !SAS.hideRunMenuItem",
@@ -713,6 +821,10 @@
         {
           "when": "editorLangId == sas && !SAS.hideRunMenuItem",
           "command": "SAS.runRegion"
+        },
+        {
+          "command": "SAS.authorize",
+          "when": "(!SAS.authorized && SAS.connectionType == rest) && !SAS.connection.direct"
         },
         {
           "when": "false",
@@ -769,12 +881,36 @@
         {
           "when": "false",
           "command": "SAS.downloadTable"
+        },
+        {
+          "when": "false",
+          "command": "SAS.downloadResource"
+        },
+        {
+          "when": "false",
+          "command": "SAS.uploadResource"
+        },
+        {
+          "when": "false",
+          "command": "SAS.uploadFileResource"
+        },
+        {
+          "when": "false",
+          "command": "SAS.uploadFolderResource"
+        },
+        {
+          "when": "false",
+          "command": "SAS.saveHTML"
         }
       ],
       "file/newFile": [
         {
           "command": "SAS.notebook.new",
           "group": "notebook"
+        },
+        {
+          "command": "SAS.file.new",
+          "group": "file"
         }
       ]
     },
@@ -818,10 +954,6 @@
       {
         "language": "sas",
         "path": "./snippets/proc-snippets.json"
-      },
-      {
-        "language": "sas",
-        "path": "./snippets/function-snippets.json"
       }
     ],
     "viewsContainers": {
@@ -876,7 +1008,7 @@
         "displayName": "%notebooks.SAS.sasNotebook%",
         "selector": [
           {
-            "filenamePattern": "*.{sasnb}"
+            "filenamePattern": "*.sasnb"
           }
         ]
       }
@@ -926,29 +1058,30 @@
     "locale": "npx @vscode/l10n-dev export -o ./l10n ./client/src && node ./tools/locale.mjs"
   },
   "devDependencies": {
-    "@trivago/prettier-plugin-sort-imports": "^4.2.0",
-    "@types/chai": "^4.3.6",
-    "@types/mocha": "^10.0.1",
-    "@types/node": "^20.8.0",
-    "@types/sinon": "^10.0.17",
-    "@typescript-eslint/eslint-plugin": "^6.7.3",
-    "@typescript-eslint/parser": "^6.7.2",
-    "@vscode/l10n-dev": "^0.0.29",
-    "chai": "^4.3.10",
-    "concurrently": "^8.2.1",
-    "esbuild": "^0.19.4",
-    "eslint": "^8.50.0",
-    "eslint-plugin-react": "^7.33.2",
+    "@trivago/prettier-plugin-sort-imports": "^4.3.0",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.24",
+    "@types/sinon": "^17.0.3",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.1.1",
+    "@vscode/l10n-dev": "^0.0.34",
+    "chai": "^4.4.1",
+    "concurrently": "^8.2.2",
+    "esbuild": "^0.20.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "mocha": "^10.2.0",
-    "nock": "^13.3.3",
+    "mocha": "^10.3.0",
+    "nock": "^13.5.4",
+    "papaparse": "^5.4.1",
     "path-browserify": "^1.0.1",
-    "prettier": "^3.0.3",
-    "sinon": "^16.0.0",
-    "ts-loader": "^9.4.4",
+    "prettier": "^3.2.5",
+    "sinon": "^17.0.1",
+    "ts-loader": "^9.5.1",
     "ts-sinon": "^2.0.2",
-    "typescript": "^5.2.2",
-    "webpack": "^5.88.2",
+    "typescript": "^5.3.3",
+    "webpack": "^5.90.3",
     "webpack-cli": "^5.1.4"
   }
 }

@@ -3,11 +3,11 @@
 import * as vscode from "vscode";
 
 import { getSession } from "../../connection";
+import { Deferred, deferred } from "../utils/deferred";
 import {
   assign_SASProgramFile,
   wrapCodeWithOutputHtml,
-} from "../Helper/SasCodeHelper";
-import { Deferred, deferred } from "../utils";
+} from "../utils/sasCode";
 
 export class NotebookController {
   readonly controllerId = "sas-notebook-controller-id";
@@ -41,13 +41,7 @@ export class NotebookController {
 
     try {
       const session = getSession();
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: vscode.l10n.t("Connecting to SAS session..."),
-        },
-        session.setup,
-      );
+      await session.setup();
     } catch (err) {
       vscode.window.showErrorMessage(
         err.response?.data ? JSON.stringify(err.response.data) : err.message,
@@ -70,7 +64,7 @@ export class NotebookController {
     execution.start(Date.now()); // Keep track of elapsed time to execute cell.
 
     const session = getSession();
-    session.onLogFn = (logLines) => {
+    session.onExecutionLogFn = (logLines) => {
       logs = logs.concat(logLines);
     };
 

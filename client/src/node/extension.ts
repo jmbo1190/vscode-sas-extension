@@ -3,18 +3,12 @@
 import {
   ConfigurationChangeEvent,
   ExtensionContext,
-  NotebookCellData,
-  NotebookCellKind,
-  NotebookData,
-  StatusBarAlignment,
-  StatusBarItem,
   Uri,
   authentication,
   commands,
   l10n,
   languages,
   tasks,
-  window,
   workspace,
 } from "vscode";
 import {
@@ -28,6 +22,7 @@ import * as path from "path";
 
 import { checkProfileAndAuthorize } from "../commands/authorize";
 import { closeSession } from "../commands/closeSession";
+import { newSASFile, newSASNotebook } from "../commands/new";
 import {
   addProfile,
   deleteProfile,
@@ -41,7 +36,13 @@ import { installCAs } from "../components/CAHelper";
 import ContentNavigator from "../components/ContentNavigator";
 import { setContext } from "../components/ExtensionContext";
 import LibraryNavigator from "../components/LibraryNavigator";
-import { LogTokensProvider, legend } from "../components/LogViewer";
+import ResultPanelSubscriptionProvider from "../components/ResultPanel";
+import {
+  getStatusBarItem,
+  resetStatusBarItem,
+  updateStatusBarItem,
+} from "../components/StatusBarItem";
+import { LogTokensProvider, legend } from "../components/logViewer";
 import { NotebookController } from "../components/notebook/Controller";
 import { NotebookSerializer } from "../components/notebook/Serializer";
 import { ConnectionType } from "../components/profile";
@@ -49,14 +50,12 @@ import { SasTaskProvider } from "../components/tasks/SasTaskProvider";
 import { SAS_TASK_TYPE } from "../components/tasks/SasTasks";
 
 let client: LanguageClient;
-// Create Profile status bar item
-const activeProfileStatusBarIcon = window.createStatusBarItem(
-  StatusBarAlignment.Left,
-  0,
-);
+
+export let extensionContext: ExtensionContext | undefined;
 
 export function activate(context: ExtensionContext): void {
   // The server is implemented in node
+  extensionContext = context;
   const serverModule = context.asAbsolutePath(
     path.join("server", "dist", "node", "server.js"),
   );
@@ -89,8 +88,6 @@ export function activate(context: ExtensionContext): void {
     clientOptions,
   );
 
-  activeProfileStatusBarIcon.command = "SAS.switchProfile";
-
   // Start the client. This will also launch the server
   client.start();
 
@@ -100,6 +97,7 @@ export function activate(context: ExtensionContext): void {
 
   const libraryNavigator = new LibraryNavigator(context);
   const contentNavigator = new ContentNavigator(context);
+  const resultPanelSubscriptionProvider = new ResultPanelSubscriptionProvider();
 
   context.subscriptions.push(
     commands.registerCommand("SAS.run", async () => {
@@ -127,16 +125,17 @@ export function activate(context: ExtensionContext): void {
     authentication.registerAuthenticationProvider(
       SASAuthProvider.id,
       "SAS",
-      new SASAuthProvider(context.secrets),
+      new SASAuthProvider(),
     ),
     languages.registerDocumentSemanticTokensProvider(
       { language: "sas-log" },
       LogTokensProvider,
       legend,
     ),
-    activeProfileStatusBarIcon,
+    getStatusBarItem(),
     ...libraryNavigator.getSubscriptions(),
     ...contentNavigator.getSubscriptions(),
+    ...resultPanelSubscriptionProvider.getSubscriptions(),
     // If configFile setting is changed, update watcher to watch new configuration file
     workspace.onDidChangeConfiguration((event: ConfigurationChangeEvent) => {
       if (event.affectsConfiguration("SAS.connectionProfiles")) {
@@ -148,33 +147,26 @@ export function activate(context: ExtensionContext): void {
       new NotebookSerializer(),
     ),
     new NotebookController(),
-    commands.registerCommand("SAS.notebook.new", async () => {
-      await window.showNotebookDocument(
-        await workspace.openNotebookDocument(
-          "sas-notebook",
-          new NotebookData([
-            new NotebookCellData(NotebookCellKind.Code, "", "sas"),
-          ]),
-        ),
-      );
-    }),
+    commands.registerCommand("SAS.notebook.new", newSASNotebook),
+    commands.registerCommand("SAS.file.new", newSASFile),
     tasks.registerTaskProvider(SAS_TASK_TYPE, new SasTaskProvider()),
   );
 
   // Reset first to set "No Active Profiles"
-  resetStatusBarItem(activeProfileStatusBarIcon);
+  resetStatusBarItem();
   // Update status bar if profile is found
-  updateStatusBarProfile(activeProfileStatusBarIcon);
+  updateStatusBarItem();
 
   profileConfig.migrateLegacyProfiles();
   triggerProfileUpdate();
 }
 
 function triggerProfileUpdate(): void {
+  commands.executeCommand("SAS.close", true);
   const profileList = profileConfig.getAllProfiles();
   const activeProfileName = profileConfig.getActiveProfile();
   if (profileList[activeProfileName]) {
-    updateStatusBarProfile(activeProfileStatusBarIcon);
+    updateStatusBarItem();
 
     const connectionType =
       profileList[activeProfileName].connectionType || ConnectionType.Rest;
@@ -197,38 +189,6 @@ function triggerProfileUpdate(): void {
       ConnectionType.Rest,
     );
   }
-}
-
-async function updateStatusBarProfile(profileStatusBarIcon: StatusBarItem) {
-  const activeProfileName = profileConfig.getActiveProfile();
-  const activeProfile = profileConfig.getProfileByName(activeProfileName);
-  if (!activeProfile) {
-    resetStatusBarItem(profileStatusBarIcon);
-  } else {
-    const statusBarTooltip = profileConfig.remoteTarget(activeProfileName);
-
-    updateStatusBarItem(
-      profileStatusBarIcon,
-      `${activeProfileName}`,
-      `${activeProfileName}\n${statusBarTooltip}`,
-    );
-  }
-}
-
-function updateStatusBarItem(
-  statusBarItem: StatusBarItem,
-  text: string,
-  tooltip: string,
-): void {
-  statusBarItem.text = `$(account) ${text}`;
-  statusBarItem.tooltip = tooltip;
-  statusBarItem.show();
-}
-
-function resetStatusBarItem(statusBarItem: StatusBarItem): void {
-  statusBarItem.text = `$(debug-disconnect) ${l10n.t("No Profile")}`;
-  statusBarItem.tooltip = l10n.t("No SAS Connection Profile");
-  statusBarItem.show();
 }
 
 export function deactivate(): Thenable<void> | undefined {

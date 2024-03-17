@@ -10,10 +10,11 @@ import {
   Messages,
 } from "../../../src/components/LibraryNavigator/const";
 import { LibraryItem } from "../../../src/components/LibraryNavigator/types";
+import RestLibraryAdapter from "../../../src/connection/rest/RestLibraryAdapter";
 import { DataAccessApi } from "../../../src/connection/rest/api/compute";
 import { getApiConfig } from "../../../src/connection/rest/common";
 
-class MockLibraryModel extends LibraryModel {
+class MockRestLibraryAdapter extends RestLibraryAdapter {
   constructor() {
     super();
     const apiConfig = getApiConfig();
@@ -23,10 +24,26 @@ class MockLibraryModel extends LibraryModel {
   }
 }
 
+class MockLibraryModel extends LibraryModel {
+  constructor() {
+    super(new MockRestLibraryAdapter());
+  }
+}
+
 const libraryDataProvider = () =>
   new LibraryDataProvider(new MockLibraryModel(), Uri.from({ scheme: "file" }));
 
 describe("LibraryDataProvider", async function () {
+  it("getChildren - returns an empty array when no adapter is specified", async () => {
+    const libraryDataProvider = new LibraryDataProvider(
+      new LibraryModel(undefined),
+      Uri.from({ scheme: "file" }),
+    );
+    const children = await libraryDataProvider.getChildren();
+
+    expect(children.length).to.equal(0);
+  });
+
   it("getChildren - returns tables with a content item", async () => {
     const library: LibraryItem = {
       uid: "lib",
