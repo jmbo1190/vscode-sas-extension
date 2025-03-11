@@ -27,13 +27,33 @@ export function getCodeDocumentConstructionParameters(
   // number of result files for viya connections.
   // This todo will be cleaned up with remaining work in #810.
   const uuid = connectionTypeIsNotRest() ? v4() : undefined;
+  // Extract the query parameters
+  const params = new URL(decodeURIComponent(textDocument.uri.toString()))
+    .searchParams;
 
-  return {
+  let path: string;
+  let id: string;
+
+  if (params.has("id")) {
+    id = params.get("id");
+    if (/^\/compute\/sessions\/\w+(-\w+)+\/files\/~fs~[^/]+$/.test(id)) {
+      path = `${id}`.split("/").pop().replace(/~fs~/g, "/");
+    }
+    console.log("id:", id);
+    console.log("path:", path);
+  }
+
+  const codeDocParams = {
     languageId: textDocument.languageId,
     code: textDocument.getText(),
     selectedCode: getSelectedCode(textDocument, addition?.selections),
     uri: textDocument.uri.toString(),
-    fileName: textDocument.fileName ?? textDocument.uri?.fsPath,
+    fileName:
+      path ??
+      textDocument.fileName ??
+      (textDocument.uri?.scheme === "file"
+        ? textDocument.uri?.fsPath
+        : textDocument.uri.toString()),
     selections: getCodeSelections(addition?.selections, textDocument),
     preamble: addition?.preamble,
     postamble: addition?.postamble,
@@ -41,6 +61,8 @@ export function getCodeDocumentConstructionParameters(
     outputHtml: isOutputHtmlEnabled(),
     uuid,
   };
+
+  return codeDocParams;
 }
 
 function getSelectedCode(
