@@ -2,7 +2,7 @@
   "name": "sas-lsp-custom",
   "displayName": "SAS (Custom)",
   "description": "Official SAS Language Extension for VS Code - Custom Version",
-  "version": "1.13.9001-custom",
+  "version": "1.13.9002-custom",
   "categories": [
     "Programming Languages",
     "Data Science",
@@ -499,7 +499,7 @@
       "[sas]": {
         "editor.formatOnType": true,
         "editor.formatOnPaste": true,
-        "editor.defaultFormatter": "SAS.sas-lsp"
+        "editor.defaultFormatter": "SASjs.sasjs-for-vscode"
       }
     },
     "commands": [
@@ -1179,27 +1179,32 @@
         {
           "id": "contentdataprovider",
           "name": "%views.SAS.explorer%",
-          "when": "SAS.authorized && SAS.connectionType == rest"
+          "when": "SAS.authorized && SAS.connectionType == rest",
+          "icon": "icons/dark/sasIndicatorDark.svg"
         },
         {
           "id": "serverdataprovider",
           "name": "%views.SAS.serverExplorer%",
-          "when": "SAS.authorized && SAS.connectionType == rest"
+          "when": "SAS.authorized && SAS.connectionType == rest",
+          "icon": "icons/dark/sasIndicatorDark.svg"
         },
         {
           "id": "librarydataprovider",
           "name": "%views.SAS.libraries%",
-          "when": "((SAS.authorized || SAS.librariesDisplayed) && SAS.librariesEnabled) || SAS.connection.direct"
+          "when": "((SAS.authorized || SAS.librariesDisplayed) && SAS.librariesEnabled) || SAS.connection.direct",
+          "icon": "icons/dark/sasIndicatorDark.svg"
         },
         {
           "id": "sas-content-get-started",
           "name": "%views.SAS.signIn%",
-          "when": "(!(SAS.authorized || SAS.librariesDisplayed) && SAS.canSignIn) && !SAS.connection.direct"
+          "when": "(!(SAS.authorized || SAS.librariesDisplayed) && SAS.canSignIn) && !SAS.connection.direct",
+          "icon": "icons/dark/sasIndicatorDark.svg"
         },
         {
           "id": "sas-content-invalid-connection",
           "name": "%views.SAS.signIn%",
-          "when": "!SAS.authorized && !SAS.canSignIn"
+          "when": "!SAS.authorized && !SAS.canSignIn",
+          "icon": "icons/dark/sasIndicatorDark.svg"
         }
       ]
     },

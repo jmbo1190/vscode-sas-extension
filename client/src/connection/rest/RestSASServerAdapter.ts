@@ -37,6 +37,23 @@ import {
 const SAS_SERVER_HOME_DIRECTORY = "SAS_SERVER_HOME_DIRECTORY";
 const SAS_FILE_SEPARATOR = "~fs~";
 
+function getLogger(type: string) {
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    info: (message: string, data?: any) => {
+      console.log(`[INFO] [${type}] ${message}`, data || "");
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    error: (message: string, error?: any) => {
+      console.error(`[ERROR] [${type}] ${message}`, error);
+    },
+    // add context property with value = context of type ExtensionContext
+    // context: cntx,
+  };
+}
+
+const logger = getLogger("RestSASServerAdapter");
+
 class RestSASServerAdapter implements ContentAdapter {
   protected baseUrl: string;
   protected fileSystemApi: ReturnType<typeof FileSystemApi>;
@@ -80,7 +97,90 @@ class RestSASServerAdapter implements ContentAdapter {
           return new Proxy(target[property], {
             apply: async function (target, _this, argList) {
               try {
-                return await target(...argList);
+                logger.info(`Request: ${property.toString()}`, argList);
+                // if (! ['getDirectoryMembers'].includes(property.toString())) {
+                //   logger.info(`Request: ${property.toString()}`);
+                // }
+                const response = await target(...argList);
+                // Retrieve and log the request URL and headers from the response
+                const requestUrl = response.config.url;
+                const requestHeaders = response.config.headers;
+                const authorization = requestHeaders.Authorization;
+                const origin = new URL(requestUrl).origin;
+                console.log({ origin, authorization });
+                if (global.sasExtContext) {
+                  global.sasExtContext.globalState.update(
+                    origin,
+                    authorization,
+                  );
+                  console.log(
+                    "global.sasExtContext.globalState.keys:",
+                    global.sasExtContext.globalState.keys(),
+                  );
+                  console.log(
+                    "global.sasExtContext.globalState.get(origin):",
+                    global.sasExtContext.globalState.get(origin),
+                  );
+                }
+                // Store the origin and authorization headers
+                // Save data to global state
+                // context.globalState.update(origin, authorization);
+                // Retrieve the data
+                // authorization = context.globalState.get(origin);
+                // Save data to workspace state
+                // context.workspaceState.update(origin, authorization);
+                // Retrieve data from workspace state
+                // authorization = context.workspaceState.get(origin);
+                logger.info(
+                  `Request URL: ${requestUrl}, Headers:`,
+                  JSON.stringify(requestHeaders, null, 2),
+                );
+                logger.info(`Response: ${property.toString()}`, response);
+                // logger.info(`Response.data:`, JSON.stringify(response.data, null, 2));
+                const responseContentType = response.headers["content-type"];
+                logger.info(`Response Content-Type: ${responseContentType}`);
+                if (
+                  responseContentType &&
+                  /application\/[^;]*\bjson/.test(
+                    `${response.headers["content-type"] || ""}`,
+                  )
+                ) {
+                  // make a deep copy of the response.data object
+                  const responseCopy = JSON.parse(
+                    JSON.stringify(response.data),
+                  );
+                  // remove the links property
+                  delete responseCopy.links;
+                  // remove the "links" of every item in the response.data.items object
+                  if (responseCopy.items) {
+                    responseCopy.items.forEach(
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      (item: any) => delete item.links,
+                    );
+                  }
+                  logger.info(
+                    `Response.data (without links):`,
+                    JSON.stringify(responseCopy, null, 2),
+                  );
+                } else {
+                  if (response.data instanceof Uint8Array) {
+                    logger.info(
+                      `Response.data: Uint8Array(${response.data.length})`,
+                      /text/.test(responseContentType)
+                        ? ", as text:\n" +
+                            new TextDecoder().decode(response.data)
+                        : " <...binary content...>",
+                    );
+                  } else {
+                    logger.info(
+                      `Response.data:`,
+                      JSON.stringify(response.data, null, 2),
+                    );
+                  }
+                }
+
+                return response;
+                // return await target(...argList);
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
               } catch (error) {
                 // If we get any error, lets reconnect and try again. If we fail a second time,
@@ -268,12 +368,32 @@ class RestSASServerAdapter implements ContentAdapter {
     );
 
     this.updateFileMetadata(path, response);
+    const responseContentType = response.headers["content-type"];
 
-    // Disabling typescript checks on this line as this function is typed
-    // to return AxiosResponse<void,any>. However, it appears to return
-    // AxiosResponse<string,>.
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    return response.data as unknown as string;
+    // Type guard function to check if a value is an instance of Uint8Array
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function isUint8Array(value: any): value is Uint8Array {
+      return value instanceof Uint8Array;
+    }
+
+    if (isUint8Array(response.data)) {
+      if (/text/.test(responseContentType)) {
+        return new TextDecoder().decode(response.data);
+      } else if (
+        // file extenson is .rds, .xpt, or .sas7bdat
+        /application\/octet-stream/.test(responseContentType) &&
+        ["rds", "sas7bdat", "xpt"].includes(path.split(".").pop())
+      ) {
+        // Encode binary content as base64
+        return Buffer.from(response.data).toString("base64");
+      } else {
+        // Disabling typescript checks on this line as this function is typed
+        // to return AxiosResponse<void,any>. However, it appears to return
+        // AxiosResponse<string,>.
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        return response.data as unknown as string;
+      }
+    }
   }
 
   public async getFolderPathForItem(): Promise<string> {

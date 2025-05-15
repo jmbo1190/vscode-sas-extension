@@ -56,7 +56,21 @@ export class ContentModel {
   public async getContentByUri(uri: Uri): Promise<string> {
     let data;
     try {
-      data = (await this.contentAdapter.getContentOfUri(uri)).toString();
+      // if (apiConfig) {
+      //   console.log(JSON.stringify(apiConfig));
+      // }
+      const { extname } = await import("path");
+      const fileExtension = extname(uri.fsPath);
+      if ([".rds", ".xpt", ".sas7bdat"].includes(fileExtension)) {
+        data = await this.contentAdapter.getContentOfUri(uri);
+        // if data is an Uint8Array, return it as base64
+        if (data instanceof Uint8Array) {
+          // Encode binary content as base64
+          return Buffer.from(data).toString("base64");
+        }
+      } else {
+        data = (await this.contentAdapter.getContentOfUri(uri)).toString();
+      }
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       throw new Error(Messages.FileOpenError);
