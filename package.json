@@ -1,8 +1,8 @@
 {
-  "name": "sas-lsp",
-  "displayName": "SAS",
-  "description": "Official SAS Language Extension for VS Code",
-  "version": "1.13.1",
+  "name": "sas-lsp-custom",
+  "displayName": "SAS (Custom)",
+  "description": "Official SAS Language Extension for VS Code - Custom Version",
+  "version": "1.13.9001-custom",
   "categories": [
     "Programming Languages",
     "Data Science",
@@ -11,7 +11,7 @@
   ],
   "publisher": "SAS",
   "license": "Apache-2.0",
-  "icon": "icons/sas.png",
+  "icon": "icons/sas-custom.png",
   "engines": {
     "vscode": "^1.89.0"
   },
