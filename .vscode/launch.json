@@ -16,7 +16,7 @@
     },
     {
       "name": "Launch Browser",
-      "type": "pwa-extensionHost",
+      "type": "extensionHost",
       "debugWebWorkerHost": true,
       "request": "launch",
       "args": [
