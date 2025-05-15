@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useState } from "react";
 
-import { ColDef, IGetRowsParams } from "ag-grid-community";
+import {
+  AllCommunityModule,
+  ColDef,
+  GridReadyEvent,
+  IGetRowsParams,
+  ModuleRegistry,
+} from "ag-grid-community";
 import { v4 } from "uuid";
 
 import { TableData } from "../components/LibraryNavigator/types";
@@ -11,6 +17,8 @@ import columnHeaderTemplate from "./columnHeaderTemplate";
 
 declare const acquireVsCodeApi;
 const vscode = acquireVsCodeApi();
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 const contextMenuHandler = (e) => {
   e.stopImmediatePropagation();
@@ -88,14 +96,14 @@ const fetchColumns = (): Promise<Column[]> => {
 };
 
 const useDataViewer = () => {
-  const [columns, setColumns] = useState([]);
+  const [columns, setColumns] = useState<ColDef[]>([]);
 
   const onGridReady = useCallback(
-    (event) => {
+    (event: GridReadyEvent) => {
       const dataSource = {
         rowCount: undefined,
-        getRows: (params: IGetRowsParams) => {
-          queryTableData(params.startRow, params.endRow).then(
+        getRows: async (params: IGetRowsParams) => {
+          await queryTableData(params.startRow, params.endRow).then(
             ({ rows, count }: TableData) => {
               const rowData = rows.map(({ cells }) => {
                 const row = cells.reduce(
@@ -115,7 +123,7 @@ const useDataViewer = () => {
         },
       };
 
-      event.api.setDatasource(dataSource);
+      event.api.setGridOption("datasource", dataSource);
     },
     [columns],
   );
@@ -128,6 +136,7 @@ const useDataViewer = () => {
     fetchColumns().then((columnsData) => {
       const columns: ColDef[] = columnsData.map((column) => ({
         field: column.name,
+        headerName: column.name,
         headerComponentParams: {
           template: columnHeaderTemplate(column.type),
         },

@@ -12,22 +12,19 @@ import {
 } from "vscode";
 import type { BaseLanguageClient } from "vscode-languageclient";
 
-import { showResult } from "../components/ResultPanel/ResultPanel";
+import { basename, extname } from "path";
+
+import { showResult } from "../components/ResultPanel";
 import {
   appendExecutionLogFn,
   appendSessionLogFn,
+  setFileName,
 } from "../components/logViewer";
-import {
-  assign_SASProgramFile,
-  wrapCodeWithOutputHtml,
-} from "../components/utils/sasCode";
+import { sasDiagnostic } from "../components/logViewer/sasDiagnostics";
+import { SASCodeDocument } from "../components/utils/SASCodeDocument";
+import { getCodeDocumentConstructionParameters } from "../components/utils/SASCodeDocumentHelper";
 import { isOutputHtmlEnabled } from "../components/utils/settings";
-import {
-  ErrorRepresentation,
-  OnLogFn,
-  RunResult,
-  getSession,
-} from "../connection";
+import { ErrorRepresentation, getSession } from "../connection";
 import { useRunStore } from "../store";
 import { profileConfig, switchProfile } from "./profile";
 
@@ -40,46 +37,6 @@ interface FoldingBlock {
 
 const { setIsExecutingCode } = useRunStore.getState();
 
-function getCode(selected = false, uri?: Uri): string {
-  const editor = uri
-    ? window.visibleTextEditors.find(
-        (editor) => editor.document.uri.toString() === uri.toString(),
-      )
-    : window.activeTextEditor;
-  const doc = editor?.document;
-  let codeFile = "";
-  if (uri && uri.fsPath) {
-    codeFile = uri.fsPath;
-  } else if (doc) {
-    if (doc.fileName) {
-      codeFile = doc.fileName;
-    } else if (doc.uri && doc.uri.fsPath) {
-      codeFile = doc.uri.fsPath;
-    }
-  }
-  let code = "";
-  if (selected) {
-    // run selected code if there is one or more non-empty selections, otherwise run all code
-
-    // since you can have multiple selections, append the text for each selection in order of selection
-    // note: selection ranges can be empty (ex. just a carat)
-    for (const selection of editor.selections) {
-      const selectedText: string = doc.getText(selection);
-      code += selectedText;
-    }
-    // if no non-whitespace characters are selected, treat as no selection and run all code
-    if (code.trim().length === 0) {
-      code = doc?.getText();
-    }
-  } else {
-    code = doc?.getText();
-  }
-  if (codeFile) {
-    code = assign_SASProgramFile(code, codeFile);
-  }
-  return wrapCodeWithOutputHtml(code);
-}
-
 async function getSelectedRegions(
   client: BaseLanguageClient,
 ): Promise<Selection[]> {
@@ -90,8 +47,7 @@ async function getSelectedRegions(
       "sas/getFoldingBlock",
       {
         textDocument: { uri: window.activeTextEditor.document.uri.toString() },
-        line,
-        col,
+        position: { line, col },
       },
     );
     if (block) {
@@ -138,11 +94,31 @@ async function runCode(selected?: boolean, uri?: Uri) {
   }
 
   const outputHtml = isOutputHtmlEnabled();
-  const code = getCode(selected, uri);
+  const editor = uri
+    ? window.visibleTextEditors.find(
+        (editor) => editor.document.uri.toString() === uri.toString(),
+      )
+    : window.activeTextEditor;
+
+  const selections = selected ? editor.selections : undefined;
+  const parameters = getCodeDocumentConstructionParameters(editor.document, {
+    selections,
+  });
+  const codeDoc = new SASCodeDocument(parameters);
+  const onExecutionLogFn = sasDiagnostic.generateLogFn(
+    codeDoc,
+    appendExecutionLogFn,
+  );
 
   const session = getSession();
-  session.onExecutionLogFn = appendExecutionLogFn;
+  session.onExecutionLogFn = onExecutionLogFn;
   session.onSessionLogFn = appendSessionLogFn;
+
+  const fileName = basename(
+    codeDoc.getFileName(),
+    extname(codeDoc.getFileName()),
+  );
+  setFileName(fileName);
 
   await session.setup();
 
@@ -156,7 +132,7 @@ async function runCode(selected?: boolean, uri?: Uri) {
       cancellationToken.onCancellationRequested(() => {
         session.cancel?.();
       });
-      return session.run(code).then((results) => {
+      return session.run(codeDoc.getWrappedCode()).then((results) => {
         if (outputHtml && results.html5) {
           showResult(results.html5, uri);
         }
@@ -194,19 +170,36 @@ export async function runSelected(uri: Uri): Promise<void> {
 export async function runRegion(client: BaseLanguageClient): Promise<void> {
   const selections = await getSelectedRegions(client);
   window.activeTextEditor.selections = selections;
-  await _run(true);
+  await _run(true, window.activeTextEditor.document.uri);
 }
 
 export function hasRunningTask() {
   return useRunStore.getState().isExecutingCode;
 }
+
 export async function runTask(
-  code: string,
+  codeDoc: SASCodeDocument,
   messageEmitter?: EventEmitter<string>,
   closeEmitter?: EventEmitter<number>,
-  onLog?: OnLogFn,
-  onSessionLog?: OnLogFn,
-): Promise<RunResult> {
+  taskLabel?: string,
+): Promise<void> {
+  return _runTask(codeDoc, messageEmitter, closeEmitter, taskLabel)
+    .catch((err) => {
+      onRunError(err);
+      throw err;
+    })
+    .finally(() => {
+      setIsExecutingCode(false);
+      commands.executeCommand("setContext", "SAS.running", false);
+    });
+}
+
+async function _runTask(
+  codeDoc: SASCodeDocument,
+  messageEmitter?: EventEmitter<string>,
+  closeEmitter?: EventEmitter<number>,
+  taskLabel?: string,
+): Promise<void> {
   if (useRunStore.getState().isExecutingCode) {
     return;
   }
@@ -230,14 +223,37 @@ export async function runTask(
     setIsExecutingCode(false);
     commands.executeCommand("setContext", "SAS.running", false);
   });
-  session.onExecutionLogFn = onLog ?? appendExecutionLogFn;
-  session.onSessionLogFn = onSessionLog ?? appendSessionLogFn;
+
+  session.onExecutionLogFn = sasDiagnostic.generateLogFn(
+    codeDoc,
+    appendExecutionLogFn,
+  );
+  session.onSessionLogFn = appendSessionLogFn;
+
+  const fileName = basename(
+    codeDoc.getFileName(),
+    extname(codeDoc.getFileName()),
+  );
+  setFileName(fileName);
 
   messageEmitter.fire(`${l10n.t("Connecting to SAS session...")}\r\n`);
   !cancelled && (await session.setup(true));
 
   messageEmitter.fire(`${l10n.t("SAS code running...")}\r\n`);
-  return cancelled ? undefined : session.run(code);
+  return cancelled
+    ? undefined
+    : session.run(codeDoc.getWrappedCode()).then((results) => {
+        const outputHtml = isOutputHtmlEnabled();
+
+        if (outputHtml && results.html5) {
+          messageEmitter.fire(l10n.t("Show results...") + "\r\n");
+          showResult(
+            results.html5,
+            undefined,
+            l10n.t("Result: {result}", { result: taskLabel }),
+          );
+        }
+      });
 }
 
 const isErrorRep = (err: unknown): err is ErrorRepresentation => {
@@ -254,7 +270,7 @@ const isErrorRep = (err: unknown): err is ErrorRepresentation => {
   return false;
 };
 
-const onRunError = (err) => {
+export const onRunError = (err) => {
   console.dir(err);
 
   if (err.response) {

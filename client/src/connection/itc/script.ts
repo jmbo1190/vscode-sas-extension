@@ -13,16 +13,13 @@ class SASRunner{
   [System.__ComObject] $objSAS
 
   [void]ResolveSystemVars(){
-  $code =
-@'
-   %let workDir = %sysfunc(pathname(work));
-   %put ${WORK_DIR_START_TAG}&workDir${WORK_DIR_END_TAG};
-   %put &=workDir;
-   %let rc = %sysfunc(dlgcdir("&workDir"));
-   run;
-'@
-    $this.Run($code)
-    $this.FlushLogLines(4096)
+    try {
+      Write-Host "${WORK_DIR_START_TAG}"
+      Write-Host $this.GetWorkDir()
+      Write-Host "${WORK_DIR_END_TAG}"
+    } catch {
+      Write-Error "${ERROR_START_TAG}Setup error: $_${ERROR_END_TAG}"
+    }
   }
   [void]Setup([string]$profileHost, [string]$username, [string]$password, [int]$port, [int]$protocol, [string]$serverName, [string]$displayLang) {
     try {
@@ -86,6 +83,20 @@ class SASRunner{
     }
   }
 
+  [string]GetWorkDir() {
+    $fieldInclusionMask = ($false, $false, $false, $true, $false)
+    [ref]$engineName = [string[]]@()
+    [ref]$engineAttrs = New-Object 'int[,]' 0,0
+    [ref]$libraryAttrs = [int[]]@()
+    [ref]$physicalName = [string[]]::new(1)
+    [ref]$infoPropertyNames = New-Object 'string[,]' 0,0
+    [ref]$infoPropertyValues = New-Object 'string[,]' 0,0
+    $lib = $this.objSAS.DataService.UseLibref("work")
+    $lib.LevelInfo([bool[]]$fieldInclusionMask,$engineName,$engineAttrs,$libraryAttrs,
+                  $physicalName,$infoPropertyNames,$infoPropertyValues)
+    return $physicalName.Value[0]
+  }
+
   [void]Run([string]$code) {
     try{
         $this.objSAS.LanguageService.Reset()
@@ -122,7 +133,7 @@ class SASRunner{
       return ""
   }
 
-  [int]FlushLogLines([int]$chunkSize) {
+  [int]FlushLogLines([int]$chunkSize,[bool]$skipPageHeader) {
     [ref]$carriageControls = [int[]]::new($chunkSize)
     [ref]$lineTypes = [int[]]::new($chunkSize)
     [ref]$logLines = [string[]]::new($chunkSize)
@@ -130,9 +141,12 @@ class SASRunner{
     try{
       $this.objSAS.LanguageService.FlushLogLines($chunkSize,$carriageControls,$lineTypes,$logLines)
     } catch{
-      throw "FlushLog error"
+      Write-Error "${ERROR_START_TAG}FlushLog error: $_${ERROR_END_TAG}"
     }
     for ($i = 0; $i -lt $logLines.Value.Length; $i++) {
+      if (($carriageControls.Value[$i] -eq 1) -and $skipPageHeader) {
+        continue
+      }
       Write-Host "${LineCodes.LogLineType}" $lineTypes.Value[$i]
       Write-Host $logLines.Value[$i]
     }
@@ -149,7 +163,7 @@ class SASRunner{
 
   [void]FetchResultsFile([string]$filePath, [string]$outputFile) {
     $fileRef = ""
-    $objFile = $this.objSAS.FileService.AssignFileref("outfile", "DISK", $filePath, "", [ref] $fileRef)
+    $objFile = $this.objSAS.FileService.AssignFileref("", "DISK", $filePath, "", [ref] $fileRef)
     $objStream = $objFile.OpenBinaryStream(1);
     [Byte[]] $bytes = 0x0
 

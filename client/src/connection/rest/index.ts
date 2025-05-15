@@ -138,7 +138,7 @@ class RestSession extends Session {
     updateStatusBarItem(true);
   };
 
-  public run = async (code: string) => {
+  protected _run = async (code: string) => {
     if (!this._computeSession?.sessionId) {
       throw new Error();
     }
@@ -189,7 +189,7 @@ class RestSession extends Session {
     return res;
   };
 
-  public close = async () => {
+  protected _close = async () => {
     if (this.sessionId()) {
       this._computeSession.delete();
       this._computeSession = undefined;
@@ -255,6 +255,7 @@ class RestSession extends Session {
 
       try {
         session = await computeServer.getSession(sessionId);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
         console.log(
           `Attempt to reconnect to session ${sessionId} failed. A new session will be started`,
@@ -268,6 +269,7 @@ class RestSession extends Session {
         const mySession = (await sessions.getSession({ sessionId: sessionId }))
           .data;
         session = ComputeSession.fromInterface(mySession);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
         console.log(
           `Attempt to reconnect to session ${sessionId} failed. A new session will be started`,

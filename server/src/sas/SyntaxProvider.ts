@@ -1,8 +1,7 @@
 // Copyright © 2022, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-/* eslint-disable @typescript-eslint/explicit-module-boundary-types,
-@typescript-eslint/no-unused-vars,@typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars,@typescript-eslint/no-explicit-any */
 import { Token } from "./Lexer";
 import { FoldingBlock, LexerEx } from "./LexerEx";
 import { Model } from "./Model";
@@ -130,7 +129,6 @@ export class SyntaxProvider {
       this.parsingState === 2 /*LanguageService.ParsingState.ENDED*/ &&
       this.parsingQueue.length
     ) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const change = this.parsingQueue.shift()!;
       this._startParse(change);
     }
@@ -398,5 +396,32 @@ export class SyntaxProvider {
   }
   setTokenCallback(cb: ((token: Token) => void) | undefined): void {
     this._tokenCallback = cb;
+  }
+  getSymbolName(block: FoldingBlock) {
+    const line = block.startLine;
+    const tokens = this.getSyntax(line);
+    for (let i = 2; i < tokens.length; i++) {
+      const token = tokens[i];
+      if (token.start <= block.startCol) {
+        continue;
+      }
+      if (token.style === "proc-name" || token.style === "text") {
+        const end =
+          i === tokens.length - 1
+            ? this.model.getColumnCount(line)
+            : tokens[i + 1].start;
+        const tokenText = this.model.getText({
+          start: { line, column: token.start },
+          end: { line, column: end },
+        });
+        if (tokenText.trim() === "") {
+          continue;
+        }
+        return `${block.name} ${
+          token.style === "proc-name" ? tokenText.toUpperCase() : tokenText
+        }`;
+      }
+    }
+    return block.name;
   }
 }

@@ -9,6 +9,7 @@ import {
   l10n,
   languages,
   tasks,
+  window,
   workspace,
 } from "vscode";
 import {
@@ -34,16 +35,23 @@ import { run, runRegion, runSelected } from "../commands/run";
 import { SASAuthProvider } from "../components/AuthProvider";
 import { installCAs } from "../components/CAHelper";
 import ContentNavigator from "../components/ContentNavigator";
+import { ContentSourceType } from "../components/ContentNavigator/types";
 import { setContext } from "../components/ExtensionContext";
 import LibraryNavigator from "../components/LibraryNavigator";
-import ResultPanelSubscriptionProvider from "../components/ResultPanel";
+import {
+  ResultPanelSubscriptionProvider,
+  SAS_RESULT_PANEL,
+  deserializeWebviewPanel,
+} from "../components/ResultPanel";
 import {
   getStatusBarItem,
   resetStatusBarItem,
   updateStatusBarItem,
 } from "../components/StatusBarItem";
 import { LogTokensProvider, legend } from "../components/logViewer";
+import { sasDiagnostic } from "../components/logViewer/sasDiagnostics";
 import { NotebookController } from "../components/notebook/Controller";
+import { exportNotebook } from "../components/notebook/Exporter";
 import { NotebookSerializer } from "../components/notebook/Serializer";
 import { ConnectionType } from "../components/profile";
 import { SasTaskProvider } from "../components/tasks/SasTaskProvider";
@@ -96,8 +104,41 @@ export function activate(context: ExtensionContext): void {
   setContext(context);
 
   const libraryNavigator = new LibraryNavigator(context);
-  const contentNavigator = new ContentNavigator(context);
+
+  // Below we have two content navigators. We'll have one to navigate
+  // SAS Content and another to navigate SAS Server. Both of these will
+  // also determine which adapter to use for processing. The options look
+  // like this:
+  // - rest connection w/ sourceType="sasContent" uses a SASContentAdapter
+  // - rest connection w/ sourceType="sasServer" uses a RestSASServerAdapter
+  // - itc/iom connection w/ sourceType="sasServer" uses ITCSASServerAdapter
+  const sasContentNavigator = new ContentNavigator(context, {
+    mimeType: "application/vnd.code.tree.contentdataprovider",
+    sourceType: ContentSourceType.SASContent,
+    treeIdentifier: "contentdataprovider",
+  });
+  const sasServerNavigator = new ContentNavigator(context, {
+    mimeType: "application/vnd.code.tree.serverdataprovider",
+    sourceType: ContentSourceType.SASServer,
+    treeIdentifier: "serverdataprovider",
+  });
+  const handleFileUpdated = (e) => {
+    switch (e.type) {
+      case "rename":
+        sasDiagnostic.updateDiagnosticUri(e.uri, e.newUri);
+        break;
+      case "recycle":
+      case "delete":
+        sasDiagnostic.ignoreAll(e.uri);
+        break;
+    }
+  };
+
   const resultPanelSubscriptionProvider = new ResultPanelSubscriptionProvider();
+
+  window.registerWebviewPanelSerializer(SAS_RESULT_PANEL, {
+    deserializeWebviewPanel,
+  });
 
   context.subscriptions.push(
     commands.registerCommand("SAS.run", async () => {
@@ -121,7 +162,10 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand("SAS.addProfile", addProfile),
     commands.registerCommand("SAS.deleteProfile", deleteProfile),
     commands.registerCommand("SAS.updateProfile", updateProfile),
-    commands.registerCommand("SAS.authorize", checkProfileAndAuthorize),
+    commands.registerCommand(
+      "SAS.authorize",
+      checkProfileAndAuthorize(libraryNavigator),
+    ),
     authentication.registerAuthenticationProvider(
       SASAuthProvider.id,
       "SAS",
@@ -134,12 +178,16 @@ export function activate(context: ExtensionContext): void {
     ),
     getStatusBarItem(),
     ...libraryNavigator.getSubscriptions(),
-    ...contentNavigator.getSubscriptions(),
+    ...sasContentNavigator.getSubscriptions(),
+    ...sasServerNavigator.getSubscriptions(),
     ...resultPanelSubscriptionProvider.getSubscriptions(),
+    sasContentNavigator.onDidManipulateFile(handleFileUpdated),
+    sasServerNavigator.onDidManipulateFile(handleFileUpdated),
     // If configFile setting is changed, update watcher to watch new configuration file
     workspace.onDidChangeConfiguration((event: ConfigurationChangeEvent) => {
       if (event.affectsConfiguration("SAS.connectionProfiles")) {
         triggerProfileUpdate();
+        updateViewSettings();
       }
     }),
     workspace.registerNotebookSerializer(
@@ -149,7 +197,9 @@ export function activate(context: ExtensionContext): void {
     new NotebookController(),
     commands.registerCommand("SAS.notebook.new", newSASNotebook),
     commands.registerCommand("SAS.file.new", newSASFile),
+    commands.registerCommand("SAS.notebook.export", exportNotebook),
     tasks.registerTaskProvider(SAS_TASK_TYPE, new SasTaskProvider()),
+    ...sasDiagnostic.getSubscriptions(),
   );
 
   // Reset first to set "No Active Profiles"
@@ -159,6 +209,31 @@ export function activate(context: ExtensionContext): void {
 
   profileConfig.migrateLegacyProfiles();
   triggerProfileUpdate();
+  updateViewSettings();
+}
+
+function updateViewSettings(): void {
+  const activeProfile = profileConfig.getProfileByName(
+    profileConfig.getActiveProfile(),
+  );
+
+  const settings = {
+    canSignIn:
+      !activeProfile || activeProfile.connectionType !== ConnectionType.SSH,
+    librariesEnabled: false,
+    contentEnabled: false,
+    librariesDisplayed: false,
+  };
+  if (activeProfile) {
+    settings.librariesEnabled =
+      activeProfile.connectionType !== ConnectionType.SSH;
+    settings.contentEnabled =
+      activeProfile.connectionType === ConnectionType.Rest;
+  }
+
+  Object.entries(settings).forEach(([key, value]) =>
+    commands.executeCommand("setContext", `SAS.${key}`, value),
+  );
 }
 
 function triggerProfileUpdate(): void {

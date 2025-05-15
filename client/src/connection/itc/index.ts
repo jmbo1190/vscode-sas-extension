@@ -12,14 +12,14 @@ import {
 import { ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { resolve } from "path";
 
-import { BaseConfig, LogLineTypeEnum, RunResult } from "..";
+import { LogLineTypeEnum, RunResult } from "..";
 import {
   getGlobalStorageUri,
   getSecretStorage,
 } from "../../components/ExtensionContext";
 import { updateStatusBarItem } from "../../components/StatusBarItem";
-import { extractOutputHtmlFileName } from "../../components/utils/sasCode";
 import { Session } from "../session";
+import { extractOutputHtmlFileName } from "../util";
 import { LineParser } from "./LineParser";
 import {
   ERROR_END_TAG,
@@ -28,10 +28,8 @@ import {
   WORK_DIR_START_TAG,
 } from "./const";
 import { scriptContent } from "./script";
-import { LineCodes } from "./types";
-import { decodeEntities } from "./util";
-
-const SECRET_STORAGE_NAMESPACE = "ITC_SECRET_STORAGE";
+import { Config, ITCProtocol, LineCodes } from "./types";
+import { decodeEntities, escapePowershellString } from "./util";
 
 const LogLineTypes: LogLineTypeEnum[] = [
   "normal",
@@ -46,22 +44,9 @@ const LogLineTypes: LogLineTypeEnum[] = [
   "message",
 ];
 
+const SECRET_STORAGE_NAMESPACE = "ITC_SECRET_STORAGE";
+
 let sessionInstance: ITCSession;
-
-export enum ITCProtocol {
-  COM = 0,
-  IOMBridge = 2,
-}
-
-/**
- * Configuration parameters for this connection provider
- */
-export interface Config extends BaseConfig {
-  host: string;
-  port: number;
-  username: string;
-  protocol: ITCProtocol;
-}
 
 export class ITCSession extends Session {
   private _config: Config;
@@ -139,9 +124,13 @@ export class ITCSession extends Session {
       this._shellProcess.stdin.write(`$profileHost = "${host}"\n`);
       this._shellProcess.stdin.write(`$port = ${port}\n`);
       this._shellProcess.stdin.write(`$protocol = ${protocol}\n`);
-      this._shellProcess.stdin.write(`$username = "${username}"\n`);
+      this._shellProcess.stdin.write(
+        `$username = "${escapePowershellString(username)}"\n`,
+      );
       const password = await this.fetchPassword();
-      this._shellProcess.stdin.write(`$password = "${password}"\n`);
+      this._shellProcess.stdin.write(
+        `$password = "${escapePowershellString(password)}"\n`,
+      );
       this._shellProcess.stdin.write(
         `$serverName = "${
           protocol === ITCProtocol.COM ? "ITC Local" : "ITC IOM Bridge"
@@ -152,6 +141,7 @@ export class ITCSession extends Session {
         `$runner.Setup($profileHost,$username,$password,$port,$protocol,$serverName,$displayLang)\n`,
         this.onWriteComplete,
       );
+      this._workDirectoryParser.reset();
       this._shellProcess.stdin.write(
         "$runner.ResolveSystemVars()\n",
         this.onWriteComplete,
@@ -218,7 +208,10 @@ export class ITCSession extends Session {
    * @param onLog A callback handler responsible for marshalling log lines back to the higher level extension API.
    * @returns A promise that eventually resolves to contain the given {@link RunResult} for the input code execution.
    */
-  public run = async (code: string): Promise<RunResult> => {
+  protected _run = async (
+    code: string,
+    skipPageHeaders?: boolean,
+  ): Promise<RunResult> => {
     const runPromise = new Promise<RunResult>((resolve, reject) => {
       this._runResolve = resolve;
       this._runReject = reject;
@@ -226,13 +219,17 @@ export class ITCSession extends Session {
 
     //write ODS output to work so that the session cleans up after itself
     const codeWithODSPath = code.replace(
-      "ods html5;",
-      `ods html5 path="${this._workDirectory}";`,
+      /\bods html5\(id=vscode\)([^;]*;)/i,
+      `ods html5(id=vscode) path="${this._workDirectory}" $1`,
     );
 
     //write an end mnemonic so that the handler knows when execution has finished
     const codeWithEnd = `${codeWithODSPath}\n%put ${LineCodes.RunEndCode};`;
-    const codeToRun = `$code=\n@'\n${codeWithEnd}\n'@\n`;
+    const codeWithEscapeNewLine = codeWithEnd.replace(
+      /\n/g,
+      "\n'@+[environment]::NewLine+@'\n",
+    );
+    const codeToRun = `$code=\n@'\n${codeWithEscapeNewLine}\n'@\n`;
 
     this._html5FileName = "";
     this._shellProcess.stdin.write(codeToRun);
@@ -242,7 +239,7 @@ export class ITCSession extends Session {
         this._runReject(error);
       }
 
-      await this.fetchLog();
+      await this.fetchLog(skipPageHeaders);
     });
 
     return runPromise;
@@ -252,7 +249,7 @@ export class ITCSession extends Session {
    * Cleans up resources for the given SAS session.
    * @returns void promise.
    */
-  public close = async (): Promise<void> => {
+  protected _close = async (): Promise<void> => {
     return new Promise((resolve) => {
       if (this._shellProcess) {
         this._shellProcess.stdin.write(
@@ -301,16 +298,17 @@ export class ITCSession extends Session {
    * Flushes the SAS log in chunks of [chunkSize] length,
    * writing each chunk to stdout.
    */
-  private fetchLog = async (): Promise<void> => {
+  private fetchLog = async (skipPageHeaders?: boolean): Promise<void> => {
     const pollingInterval = setInterval(() => {
       if (!this._pollingForLogResults) {
         clearInterval(pollingInterval);
       }
+      const skipPageHeadersValue = skipPageHeaders ? "$true" : "$false";
       this._shellProcess.stdin.write(
         `
   do {
     $chunkSize = 32768
-    $count = $runner.FlushLogLines($chunkSize)
+    $count = $runner.FlushLogLines($chunkSize, ${skipPageHeadersValue})
   } while ($count -gt 0)\n
     `,
         this.onWriteComplete,
@@ -350,15 +348,7 @@ export class ITCSession extends Session {
   };
 
   private fetchWorkDirectory = (line: string): string | undefined => {
-    let foundWorkDirectory = "";
-    if (
-      !line.includes(`%put ${WORK_DIR_START_TAG}&workDir${WORK_DIR_END_TAG};`)
-    ) {
-      foundWorkDirectory = this._workDirectoryParser.processLine(line);
-    } else {
-      // If the line is the put statement, we don't need to log that
-      return;
-    }
+    const foundWorkDirectory = this._workDirectoryParser.processLine(line);
     // We don't want to output any of the captured lines
     if (this._workDirectoryParser.isCapturingLine()) {
       return;
@@ -429,18 +419,21 @@ export class ITCSession extends Session {
         return;
       }
 
-      const foundWorkDirectory = this.fetchWorkDirectory(line);
-      if (foundWorkDirectory === undefined) {
-        return;
-      }
-
-      if (!this._workDirectory && foundWorkDirectory) {
-        this._workDirectory = foundWorkDirectory;
-        this._runResolve();
-        updateStatusBarItem(true);
-        return;
-      }
       if (!this.processLineCodes(line)) {
+        if (!this._workDirectory) {
+          const foundWorkDirectory = this.fetchWorkDirectory(line);
+          if (foundWorkDirectory === undefined) {
+            return;
+          }
+
+          if (foundWorkDirectory) {
+            this._workDirectory = foundWorkDirectory.trim();
+            this._runResolve();
+            updateStatusBarItem(true);
+            return;
+          }
+        }
+
         this._html5FileName = extractOutputHtmlFileName(
           line,
           this._html5FileName,
@@ -515,12 +508,14 @@ export class ITCSession extends Session {
    */
   private fetchResults = async () => {
     if (!this._html5FileName) {
+      this._pollingForLogResults = false;
       return this._runResolve({});
     }
 
     const globalStorageUri = getGlobalStorageUri();
     try {
       await workspace.fs.readDirectory(globalStorageUri);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       await workspace.fs.createDirectory(globalStorageUri);
     }

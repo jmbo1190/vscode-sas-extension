@@ -1,8 +1,20 @@
 // Copyright © 2023, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { l10n, workspace } from "vscode";
+import { Uri, authentication, l10n, workspace } from "vscode";
 
+import axios, { AxiosInstance } from "axios";
+import { basename } from "path";
 import { v4 } from "uuid";
+
+import {
+  associateFlowObject,
+  createStudioSession,
+} from "../../connection/studio";
+import { SASAuthProvider } from "../AuthProvider";
+import { ContentModel } from "./ContentModel";
+import { MYFOLDER_TYPE, Messages } from "./const";
+import { ContentItem, ContentSourceType } from "./types";
+import { isContentItem } from "./utils";
 
 const stepRef: Record<string, string> = {
   sas: "a7190700-f59c-4a94-afe2-214ce639fcde",
@@ -324,4 +336,109 @@ export function convertNotebookToFlow(
   // encode json to utf8 bytes without new lines and spaces
   const flowDataString = JSON.stringify(flowData, null, 0);
   return flowDataString;
+}
+
+export class NotebookToFlowConverter {
+  protected studioSessionId: string;
+  protected connection: AxiosInstance;
+
+  public constructor(
+    protected readonly resource: ContentItem | Uri,
+    protected readonly contentModel: ContentModel,
+    protected readonly viyaEndpoint: string,
+    protected readonly sourceType: ContentSourceType,
+  ) {}
+
+  public get inputName() {
+    return isContentItem(this.resource)
+      ? this.resource.name
+      : basename(this.resource.fsPath);
+  }
+
+  private async parent() {
+    const parentItem = isContentItem(this.resource)
+      ? await this.contentModel.getParent(this.resource)
+      : undefined;
+
+    if (parentItem) {
+      return parentItem;
+    }
+
+    const rootFolders = await this.contentModel.getChildren();
+    const myFolder = rootFolders.find(
+      (rootFolder) => rootFolder.type === MYFOLDER_TYPE,
+    );
+    if (!myFolder) {
+      return undefined;
+    }
+
+    return myFolder;
+  }
+
+  public async content() {
+    return isContentItem(this.resource)
+      ? await this.contentModel.getContentByUri(this.resource.vscUri)
+      : (await workspace.fs.readFile(this.resource)).toString();
+  }
+
+  public async establishConnection() {
+    this.connection = axios.create({ baseURL: this.viyaEndpoint });
+    const session = await authentication.getSession(SASAuthProvider.id, [], {
+      createIfNone: true,
+    });
+    this.connection.defaults.headers.common.Authorization = `Bearer ${session.accessToken}`;
+
+    try {
+      const result = await createStudioSession(this.connection);
+      this.studioSessionId = result;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (error) {
+      this.studioSessionId = "";
+    }
+
+    return this.studioSessionId;
+  }
+
+  public async convert(outputName: string) {
+    const flowDataString = convertNotebookToFlow(
+      await this.content(),
+      this.inputName,
+      outputName,
+    );
+    const flowDataUint8Array = new TextEncoder().encode(flowDataString);
+    if (flowDataUint8Array.length === 0) {
+      throw new Error(Messages.NoCodeToConvert);
+    }
+
+    const parentItem = await this.parent();
+    const newItem = await this.contentModel.createUniqueFileOfPrefix(
+      parentItem,
+      outputName,
+      flowDataUint8Array,
+    );
+    if (!newItem) {
+      throw new Error(
+        l10n.t(Messages.NewFileCreationError, { name: this.inputName }),
+      );
+    }
+
+    // We don't need to associate the flow object if it's stored in sas server
+    if (this.sourceType === ContentSourceType.SASServer) {
+      return {
+        parentItem,
+        folderName: parentItem.uri.split("/").pop().replace(/~fs~/g, "/"),
+      };
+    }
+
+    // associate the new .flw file with SAS Studio
+    const folderName = await associateFlowObject(
+      outputName,
+      newItem.resourceId,
+      parentItem.resourceId,
+      this.studioSessionId,
+      this.connection,
+    );
+
+    return { folderName, parentItem };
+  }
 }

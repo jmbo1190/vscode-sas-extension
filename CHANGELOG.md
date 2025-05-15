@@ -4,11 +4,140 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). If you introduce breaking changes, please group them together in the "Changed" section using the **BREAKING:** prefix.
 
-## [Unreleased]
+## [v1.13.1] - 2025-03-04
+
+### Fixed
+
+- SAS log color issue ([#1325](https://github.com/sassoftware/vscode-sas-extension/issues/1325))
+- Remove unexpected endsubmit autocomplete ([#1357](https://github.com/sassoftware/vscode-sas-extension/issues/1357))
+- Proc Python auto-indent issue ([#1376](https://github.com/sassoftware/vscode-sas-extension/issues/1376))
+- Better error display for Rest session creation errors ([#1367](https://github.com/sassoftware/vscode-sas-extension/issues/1367))
+- Stop running when close session ([#1390](https://github.com/sassoftware/vscode-sas-extension/pull/1390))
+
+## [v1.13.0] - 2024-12-23
+
+### Changed
+
+- Required VS Code version 1.89 at minimum
+
+### Added
+
+- Python language features inside proc python ([#991](https://github.com/sassoftware/vscode-sas-extension/pull/991))
+- Inherit VS Code file icons in SAS Content and Server ([#1310](https://github.com/sassoftware/vscode-sas-extension/pull/1310))
+- Display macro name in outline pane ([#1326](https://github.com/sassoftware/vscode-sas-extension/pull/1326))
+
+### Fixed
+
+- Display global option help in data step ([#1282](https://github.com/sassoftware/vscode-sas-extension/issues/1282))
+- Unnecessary empty line added by formatter ([#1288](https://github.com/sassoftware/vscode-sas-extension/issues/1288))
+- Display context in hover help for data step statement option ([#1306](https://github.com/sassoftware/vscode-sas-extension/issues/1306))
+- SAS log code action should not impact others ([#1302](https://github.com/sassoftware/vscode-sas-extension/issues/1302))
+- The notebook file is opened incorrectly after renaming ([#1289](https://github.com/sassoftware/vscode-sas-extension/issues/1289))
+- Resolve breaking changes by AG Grid 33 ([#1334](https://github.com/sassoftware/vscode-sas-extension/issues/1334))
+
+## [v1.12.0] - 2024-11-25
+
+### Added
+
+- Added username and password support for SSH connection type ([#1126](https://github.com/sassoftware/vscode-sas-extension/pull/1126))
+- Added support for SAS server for viya connections ([#1203](https://github.com/sassoftware/vscode-sas-extension/pull/1203))
+- Enable find in result pane ([#714](https://github.com/sassoftware/vscode-sas-extension/pull/714))
+
+### Fixed
+
+- Formatting should allow statements between proc python and submit ([#1226](https://github.com/sassoftware/vscode-sas-extension/issues/1226))
+- SAS Log isn't shown ([#1243](https://github.com/sassoftware/vscode-sas-extension/issues/1243))
+- Bracket matching in macro quote ([#1213](https://github.com/sassoftware/vscode-sas-extension/issues/1213))
+- Failed to run code the second time with IOM ([#1266](https://github.com/sassoftware/vscode-sas-extension/issues/1266))
+- Should not show hover help on whitespaces ([#1267](https://github.com/sassoftware/vscode-sas-extension/issues/1267))
+
+## [v1.11.0] - 2024-10-09
+
+### Added
+
+- Export sas notebook to sas file ([#1157](https://github.com/sassoftware/vscode-sas-extension/pull/1157))
+- Clear log on execution start (with new setting `SAS.log.clearOnExecutionStart`) ([#1168](https://github.com/sassoftware/vscode-sas-extension/pull/1168))
+
+### Fixed
+
+- "Run sas file" tasks do not respect selected code ([#1177](https://github.com/sassoftware/vscode-sas-extension/issues/1177))
+- Use builtin default System Option MEMSIZE value rather than hardcoding to 0 ([#1189](https://github.com/sassoftware/vscode-sas-extension/issues/1189))
+- Log contents are not rendered properly if trying to switch profile from SSH to other connection types ([#1070](https://github.com/sassoftware/vscode-sas-extension/issues/1070))
+- Try to run a SAS file having no contents will lead to console error ([#1201](https://github.com/sassoftware/vscode-sas-extension/issues/1201))
+- Formatting proc FEDSQL deletes the content of the proc ([#1202](https://github.com/sassoftware/vscode-sas-extension/issues/1202))
+
+## [v1.10.2] - 2024-08-30
+
+### Fixed
+
+- Code lost when formatting proc python without endsubmit ([#992](https://github.com/sassoftware/vscode-sas-extension/issues/992))
+- Library tree view keeps refreshing ([#1022](https://github.com/sassoftware/vscode-sas-extension/issues/1022))
+- Table viewer does not display variable names ([#1114](https://github.com/sassoftware/vscode-sas-extension/issues/1114))
+- Disable sort UI on table as it does nothing ([#1013](https://github.com/sassoftware/vscode-sas-extension/issues/1013))
+- Inconsistency between column title on table viewer and dataset variable name ([#1117](https://github.com/sassoftware/vscode-sas-extension/issues/1117))
+- Reset cell log upon cell submit in sasnb ([#1080](https://github.com/sassoftware/vscode-sas-extension/issues/1080))
+- Log information are missing in certain case with Viya connection ([#963](https://github.com/sassoftware/vscode-sas-extension/issues/963))
+- Get working directory error in IOM connection ([#1163](https://github.com/sassoftware/vscode-sas-extension/issues/1163))
+
+## [v1.10.1] - 2024-07-22
+
+### Fixed
+
+- Auto-indent improvement ([#522](https://github.com/sassoftware/vscode-sas-extension/issues/522)) ([#652](https://github.com/sassoftware/vscode-sas-extension/issues/652))
+- Log output by running task ([#1058](https://github.com/sassoftware/vscode-sas-extension/issues/1058))
+- Resolve the breaking change introduced by AG Grid 32.0 ([#1096](https://github.com/sassoftware/vscode-sas-extension/issues/1096))
+- Library pane crash with option symbolgen ([#1012](https://github.com/sassoftware/vscode-sas-extension/issues/1012))
+
+## [v1.10.0] - 2024-06-18
+
+### Added
+
+- Show problems from SAS log ([#627](https://github.com/sassoftware/vscode-sas-extension/pull/627))
+- New [documentation site](https://sassoftware.github.io/vscode-sas-extension/) ([#1030](https://github.com/sassoftware/vscode-sas-extension/pull/1030))
+
+### Fixed
+
+- Fileref OUTFILE should be allowed for COM/IOM ([#868](https://github.com/sassoftware/vscode-sas-extension/issues/868))
+- Syntax help issue in special case ([#900](https://github.com/sassoftware/vscode-sas-extension/issues/900)) ([#954](https://github.com/sassoftware/vscode-sas-extension/issues/954))
+- IOM connection hang when work dir is long ([#964](https://github.com/sassoftware/vscode-sas-extension/issues/964))
+- Support cshell for ssh ([#1005](https://github.com/sassoftware/vscode-sas-extension/issues/1005))
+- Fix content type when saving files ([#878](https://github.com/sassoftware/vscode-sas-extension/issues/878))
+
+## [v1.9.0] - 2024-04-30
+
+### Added
+
+- Add data viewer support for IOM/COM connections ([#680](https://github.com/sassoftware/vscode-sas-extension/issues/680))
+- SQL/Python/Lua syntax highlighting ([#813](https://github.com/sassoftware/vscode-sas-extension/pull/813))
+
+### Fixed
+
+- Content type for file creation/upload ([#878](https://github.com/sassoftware/vscode-sas-extension/issues/878))
+- ods html5 output path to work directory ([#664](https://github.com/sassoftware/vscode-sas-extension/pull/664))
+- Log with Error type has no color with Viya connection ([#886](https://github.com/sassoftware/vscode-sas-extension/issues/886))
+- Function autocomplete display issue ([#905](https://github.com/sassoftware/vscode-sas-extension/issues/905))
+- Result panels are empty on VS Code restart ([#937](https://github.com/sassoftware/vscode-sas-extension/issues/937))
+- using pretty for json output to avoid long line ([#938](https://github.com/sassoftware/vscode-sas-extension/pull/938))
+- Password Character Parsing for SAS 9.4 Remote IOM Connection ([#939](https://github.com/sassoftware/vscode-sas-extension/issues/939))
+
+## [v1.8.0] - 2024-03-20
+
+### Added
+
+- Added SAS file entry to `New File...` menu ([#812](https://github.com/sassoftware/vscode-sas-extension/pull/812))
+- SAS log colors for Local 94 and IOM ([#843](https://github.com/sassoftware/vscode-sas-extension/pull/843))
+- Added better error reporting for COM/IOM connections ([#842](https://github.com/sassoftware/vscode-sas-extension/pull/842))
 
 ### Changed
 
 - Update command palette entry `SAS: Sign in` so that it's only visible for Viya profiles. Non-viya users will still be able to connect and execute code by using the running man icon ([#862](https://github.com/sassoftware/vscode-sas-extension/pull/862))
+
+### Fixed
+
+- Formatting issue when lua submit block is empty ([#848](https://github.com/sassoftware/vscode-sas-extension/issues/848))
+- Remote Unix machine x window issue ([#699](https://github.com/sassoftware/vscode-sas-extension/issues/699))
+- PDF Download doesn't display content ([#838](https://github.com/sassoftware/vscode-sas-extension/issues/838))
+- Prevent Viya connection from generating guid based html files ([#815](https://github.com/sassoftware/vscode-sas-extension/pull/815))
 
 ## [v1.7.1] - 2024-02-15
 

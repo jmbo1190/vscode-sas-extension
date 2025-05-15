@@ -1,8 +1,7 @@
 // Copyright © 2022, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-/* eslint-disable @typescript-eslint/explicit-module-boundary-types,
-@typescript-eslint/no-unused-vars,@typescript-eslint/no-explicit-any,@typescript-eslint/dot-notation */
+/* eslint-disable @typescript-eslint/no-unused-vars,@typescript-eslint/no-explicit-any,@typescript-eslint/dot-notation */
 import { ResLoader } from "../node/ResLoader";
 import { arrayToMap } from "./utils";
 
@@ -861,7 +860,6 @@ function _setKeywords(type: string, keywords: any) {
 }
 
 function _loadKeywords(type: string, cb: any) {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const url = _resolveURL(type)!;
   ResLoader.get(
     url,
@@ -1802,8 +1800,6 @@ function _tryToLoadStatementOptionsImmediately(stmtName: string) {
 }
 
 export class SyntaxDataProvider {
-  noGlobal: boolean | undefined;
-
   // private functions
   private _handleOptionValues(
     data: OptionValues,
@@ -1981,7 +1977,11 @@ export class SyntaxDataProvider {
       return data;
     });
   }
-  getProcedureStatements(procName: string, cb?: (data: string[]) => void) {
+  getProcedureStatements(
+    procName: string,
+    noGlobal?: boolean,
+    cb?: (data: string[]) => void,
+  ) {
     procName = procName.toUpperCase();
     return _tryToLoadProcedure(procName, cb, () => {
       let data = _procStmtObj(procName);
@@ -1991,7 +1991,7 @@ export class SyntaxDataProvider {
       if (!data) {
         data = [];
       }
-      if (!this.noGlobal) {
+      if (!noGlobal) {
         const gps = this.getGlobalProcedureStatements();
         if (gps) {
           data = data.concat(gps);
@@ -2181,9 +2181,10 @@ export class SyntaxDataProvider {
     procName: string,
     stmtName: string,
     optName: string,
-    cb: (data: OptionValues) => void,
+    cb: (data?: OptionValues) => void,
   ) {
     if (!optName) {
+      cb(undefined);
       return null;
     }
     stmtName = stmtName.toUpperCase();
@@ -2620,7 +2621,6 @@ export class SyntaxDataProvider {
       }
       if (obj[ID_HAS_OPT_DELIMITER] === undefined) {
         obj[ID_HAS_OPT_DELIMITER] = /Syntax:(.|\n)*\/(.|\n)*;/i.test(
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           help.data!,
         );
       }
@@ -2651,7 +2651,7 @@ export class SyntaxDataProvider {
     stmtName: string,
     optName?: string,
     valName?: string,
-  ) {
+  ): boolean {
     _loadProcedureImmediately(procName);
     let ret = _procStmtObj(procName, stmtName, optName, valName);
     if (stmtName && !ret) {
@@ -2697,8 +2697,8 @@ export class SyntaxDataProvider {
     stmtName: string,
     optName?: string,
     valName?: string,
-  ) {
-    return _tryToLoadStatementsFromPubs(context, null, function () {
+  ): boolean {
+    return !!_tryToLoadStatementsFromPubs(context, null, function () {
       return !!_procStmtObj(context, stmtName, optName, valName);
     });
   }
@@ -2737,7 +2737,6 @@ export class SyntaxDataProvider {
     return /\bC\b/.test(type) || type.toLowerCase() === "color";
   }
   isInteractiveProc(name: string) {
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
     _tryToLoadProceduresFromPubs(null, function () {});
     const data = _keywordObj("proc", name);
     return data && data[ID_ATTR] === "InteractivePROC";

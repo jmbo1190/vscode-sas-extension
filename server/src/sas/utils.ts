@@ -28,7 +28,7 @@ let bundle: Record<string, string>;
 const locale: string =
   typeof process !== "undefined" && process.env.VSCODE_NLS_CONFIG
     ? JSON.parse(process.env.VSCODE_NLS_CONFIG).locale
-    : navigator?.language ?? "en";
+    : (global.navigator?.language ?? "en");
 const supportedLanguages = [
   "ar",
   "cs",
@@ -66,7 +66,7 @@ const supportedLanguages = [
 export function getText(key: string, arg?: string): string {
   if (!bundle) {
     bundle = {};
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require("../../messagebundle.properties")
       .split("\n")
       .forEach((pair: string) => {
@@ -103,3 +103,11 @@ export function getText(key: string, arg?: string): string {
   }
   return result;
 }
+
+export const isCustomRegionStartComment = (commmentText?: string) => {
+  return /^\s*[%/]?\*\s*region\b/i.test(commmentText ?? "");
+};
+
+export const isCustomRegionEndComment = (commmentText?: string) => {
+  return /^\s*[%/]?\*\s*endregion\b/i.test(commmentText ?? "");
+};

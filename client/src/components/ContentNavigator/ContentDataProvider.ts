@@ -14,12 +14,10 @@ import {
   FileType,
   Position,
   ProviderResult,
-  Tab,
   TabInputNotebook,
   TabInputText,
   TextDocument,
   TextDocumentContentProvider,
-  ThemeIcon,
   TreeDataProvider,
   TreeDragAndDropController,
   TreeItem,
@@ -43,31 +41,23 @@ import { ViyaProfile } from "../profile";
 import { ContentModel } from "./ContentModel";
 import {
   FAVORITES_FOLDER_TYPE,
-  MYFOLDER_TYPE,
   Messages,
   ROOT_FOLDER_TYPE,
+  SERVER_HOME_FOLDER_TYPE,
+  SERVER_ROOT_FOLDER_TYPE,
   TRASH_FOLDER_TYPE,
 } from "./const";
-import { convertNotebookToFlow } from "./convert";
-import { ContentItem } from "./types";
 import {
-  getCreationDate,
+  ContentItem,
+  ContentNavigatorConfig,
+  FileManipulationEvent,
+} from "./types";
+import {
+  getEditorTabsForItem,
   getFileStatement,
-  getId,
   isContainer as getIsContainer,
-  getLabel,
-  getLink,
-  getModifyDate,
-  getResourceIdFromItem,
-  getTypeName,
-  getUri,
-  isContainer,
-  isItemInRecycleBin,
-  isReference,
-  resourceType,
 } from "./utils";
 
-const contentItemMimeType = "application/vnd.code.tree.contentdataprovider";
 class ContentDataProvider
   implements
     TreeDataProvider<ContentItem>,
@@ -76,29 +66,39 @@ class ContentDataProvider
     SubscriptionProvider,
     TreeDragAndDropController<ContentItem>
 {
+  private _onDidManipulateFile: EventEmitter<FileManipulationEvent>;
   private _onDidChangeFile: EventEmitter<FileChangeEvent[]>;
   private _onDidChangeTreeData: EventEmitter<ContentItem | undefined>;
   private _onDidChange: EventEmitter<Uri>;
   private _treeView: TreeView<ContentItem>;
   private _dropEditProvider: Disposable;
-  private readonly model: ContentModel;
+  private model: ContentModel;
   private extensionUri: Uri;
+  private mimeType: string;
 
-  public dropMimeTypes: string[] = [contentItemMimeType, "text/uri-list"];
-  public dragMimeTypes: string[] = [contentItemMimeType];
+  public dropMimeTypes: string[];
+  public dragMimeTypes: string[];
 
   get treeView(): TreeView<ContentItem> {
     return this._treeView;
   }
 
-  constructor(model: ContentModel, extensionUri: Uri) {
+  constructor(
+    model: ContentModel,
+    extensionUri: Uri,
+    { mimeType, treeIdentifier }: ContentNavigatorConfig,
+  ) {
+    this._onDidManipulateFile = new EventEmitter<FileManipulationEvent>();
     this._onDidChangeFile = new EventEmitter<FileChangeEvent[]>();
     this._onDidChangeTreeData = new EventEmitter<ContentItem | undefined>();
     this._onDidChange = new EventEmitter<Uri>();
     this.model = model;
     this.extensionUri = extensionUri;
+    this.dropMimeTypes = [mimeType, "text/uri-list"];
+    this.dragMimeTypes = [mimeType];
+    this.mimeType = mimeType;
 
-    this._treeView = window.createTreeView("contentdataprovider", {
+    this._treeView = window.createTreeView(treeIdentifier, {
       treeDataProvider: this,
       dragAndDropController: this,
       canSelectMany: true,
@@ -118,6 +118,10 @@ class ContentDataProvider
     });
   }
 
+  public useModel(contentModel: ContentModel) {
+    this.model = contentModel;
+  }
+
   public async handleDrop(
     target: ContentItem,
     sources: DataTransfer,
@@ -129,7 +133,7 @@ class ContentDataProvider
       }
 
       switch (mimeType) {
-        case contentItemMimeType:
+        case this.mimeType:
           await Promise.all(
             item.value.map(
               async (contentItem: ContentItem) =>
@@ -197,6 +201,10 @@ class ContentDataProvider
     return this._onDidChange.event;
   }
 
+  get onDidManipulateFile(): Event<FileManipulationEvent> {
+    return this._onDidManipulateFile.event;
+  }
+
   public async connect(baseUrl: string): Promise<void> {
     await this.model.connect(baseUrl);
     this.refresh();
@@ -204,14 +212,9 @@ class ContentDataProvider
 
   public async getTreeItem(item: ContentItem): Promise<TreeItem> {
     const isContainer = getIsContainer(item);
-
-    const uri = await this.getUri(item, false);
+    const uri = await this.model.getUri(item, false);
 
     return {
-      iconPath: this.iconPathForItem(item),
-      contextValue: resourceType(item),
-      id: getId(item),
-      label: getLabel(item),
       collapsibleState: isContainer
         ? TreeItemCollapsibleState.Collapsed
         : undefined,
@@ -222,6 +225,11 @@ class ContentDataProvider
             arguments: [uri],
             title: "Open SAS File",
           },
+      contextValue: item.contextValue,
+      iconPath: this.iconPathForItem(item),
+      id: item.uid,
+      label: item.name,
+      resourceUri: uri,
     };
   }
 
@@ -236,29 +244,19 @@ class ContentDataProvider
 
   public watch(): Disposable {
     // ignore, fires for all changes...
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
     return new Disposable(() => {});
   }
 
   public async stat(uri: Uri): Promise<FileStat> {
-    return await this.model.getResourceByUri(uri).then(
-      (resource): FileStat => ({
-        type: getIsContainer(resource) ? FileType.Directory : FileType.File,
-        ctime: getCreationDate(resource),
-        mtime: getModifyDate(resource),
-        size: 0,
-      }),
-    );
+    return await this.model
+      .getResourceByUri(uri)
+      .then((resource): FileStat => resource.fileStat);
   }
 
   public async readFile(uri: Uri): Promise<Uint8Array> {
     return await this.model
       .getContentByUri(uri)
       .then((content) => new TextEncoder().encode(content));
-  }
-
-  public getUri(item: ContentItem, readOnly: boolean): Promise<Uri> {
-    return this.model.getUri(item, readOnly);
   }
 
   public async createFolder(
@@ -268,7 +266,7 @@ class ContentDataProvider
     const newItem = await this.model.createFolder(item, folderName);
     if (newItem) {
       this.refresh();
-      return getUri(newItem);
+      return newItem.vscUri;
     }
   }
 
@@ -280,7 +278,7 @@ class ContentDataProvider
     const newItem = await this.model.createFile(item, fileName, buffer);
     if (newItem) {
       this.refresh();
-      return getUri(newItem);
+      return newItem.vscUri;
     }
   }
 
@@ -289,17 +287,64 @@ class ContentDataProvider
     name: string,
   ): Promise<Uri | undefined> {
     const closing = closeFileIfOpen(item);
-    if (!(await closing)) {
+    const removedTabUris = await closing;
+    if (!removedTabUris) {
       return;
     }
+
     const newItem = await this.model.renameResource(item, name);
-    if (newItem) {
-      const newUri = getUri(newItem);
-      if (closing !== true) {
-        // File was open before rename, so re-open it
-        commands.executeCommand("vscode.open", newUri);
+    if (!newItem) {
+      return;
+    }
+
+    const newUri = newItem.vscUri;
+    const oldUriToNewUriMap = [[item.vscUri, newUri]];
+    const newItemIsContainer = getIsContainer(newItem);
+    if (closing !== true && !newItemIsContainer) {
+      await commands.executeCommand("vscode.open", newUri);
+    }
+    if (closing !== true && newItemIsContainer) {
+      const urisToOpen = getPreviouslyOpenedChildItems(
+        await this.getChildren(newItem),
+      );
+      for (const [, newUri] of urisToOpen) {
+        await commands.executeCommand("vscode.open", newUri);
       }
-      return newUri;
+      oldUriToNewUriMap.push(...urisToOpen);
+    }
+    oldUriToNewUriMap.forEach(([uri, newUri]) =>
+      this._onDidManipulateFile.fire({
+        type: "rename",
+        uri,
+        newUri,
+      }),
+    );
+    return newUri;
+
+    function getPreviouslyOpenedChildItems(childItems: ContentItem[]) {
+      const loadChildItems = closing !== true && newItemIsContainer;
+      if (!Array.isArray(removedTabUris) || !loadChildItems) {
+        return [];
+      }
+      // Here's where things get a little weird. When we rename folders in
+      // sas content, we _don't_ close those files. It doesn't matter since
+      // their path isn't hierarchical. In sas file system, the path is hierarchical,
+      // thus we need to re-open all the closed files. This does that by getting
+      // children and comparing the removedTabUris
+      const filteredChildItems = childItems
+        .map((childItem) => {
+          const matchingUri = removedTabUris.find((uri) =>
+            uri.path.endsWith(childItem.name),
+          );
+          if (!matchingUri) {
+            return;
+          }
+
+          return [matchingUri, childItem.vscUri];
+        })
+        .filter((exists) => exists);
+
+      return filteredChildItems;
     }
   }
 
@@ -314,44 +359,44 @@ class ContentDataProvider
     const success = await this.model.delete(item);
     if (success) {
       this.refresh();
+      this._onDidManipulateFile.fire({ type: "delete", uri: item.vscUri });
     }
     return success;
+  }
+
+  public canRecycleResource(item: ContentItem): boolean {
+    return this.model.canRecycleResource(item);
   }
 
   public async recycleResource(item: ContentItem): Promise<boolean> {
-    const recycleBin = this.model.getDelegateFolder("@myRecycleBin");
-    if (!recycleBin) {
-      // fallback to delete
-      return this.deleteResource(item);
-    }
-    const recycleBinUri = getLink(recycleBin.links, "GET", "self")?.uri;
-    if (!recycleBinUri) {
-      return false;
-    }
     if (!(await closeFileIfOpen(item))) {
       return false;
     }
-    const success = await this.model.moveTo(item, recycleBinUri);
-    if (success) {
+
+    const { newUri, oldUri } = await this.model.recycleResource(item);
+
+    if (newUri) {
       this.refresh();
       // update the text document content as well just in case that this file was just restored and updated
-      this._onDidChange.fire(getUri(item, true));
+      this._onDidChange.fire(newUri);
+      this._onDidManipulateFile.fire({
+        type: "recycle",
+        uri: oldUri,
+      });
     }
-    return success;
+
+    return !!newUri;
   }
 
   public async restoreResource(item: ContentItem): Promise<boolean> {
-    const previousParentUri = getLink(item.links, "GET", "previousParent")?.uri;
-    if (!previousParentUri) {
-      return false;
-    }
     if (!(await closeFileIfOpen(item))) {
       return false;
     }
-    const success = await this.model.moveTo(item, previousParentUri);
+    const success = await this.model.restoreResource(item);
     if (success) {
       this.refresh();
     }
+
     return success;
   }
 
@@ -395,67 +440,6 @@ class ContentDataProvider
     }
 
     this.reveal(resource);
-  }
-
-  public async acquireStudioSessionId(endpoint: string): Promise<string> {
-    if (endpoint && !this.model.connected()) {
-      await this.connect(endpoint);
-    }
-    return await this.model.acquireStudioSessionId();
-  }
-
-  public async convertNotebookToFlow(
-    inputName: string,
-    outputName: string,
-    content: string,
-    studioSessionId: string,
-    parentItem?: ContentItem,
-  ): Promise<string> {
-    if (!parentItem) {
-      const rootFolders = await this.model.getChildren();
-      const myFolder = rootFolders.find(
-        (rootFolder) => rootFolder.type === MYFOLDER_TYPE,
-      );
-      if (!myFolder) {
-        return "";
-      }
-      parentItem = myFolder;
-    }
-
-    try {
-      // convert the notebook file to a .flw file
-      const flowDataString = convertNotebookToFlow(
-        content,
-        inputName,
-        outputName,
-      );
-      const flowDataUint8Array = new TextEncoder().encode(flowDataString);
-      if (flowDataUint8Array.length === 0) {
-        window.showErrorMessage(Messages.NoCodeToConvert);
-        return;
-      }
-      const newUri = await this.createFile(
-        parentItem,
-        outputName,
-        flowDataUint8Array,
-      );
-      this.handleCreationResponse(
-        parentItem,
-        newUri,
-        l10n.t(Messages.NewFileCreationError, { name: inputName }),
-      );
-      // associate the new .flw file with SAS Studio
-      await this.model.associateFlowFile(
-        outputName,
-        newUri,
-        parentItem,
-        studioSessionId,
-      );
-    } catch (error) {
-      window.showErrorMessage(error);
-    }
-
-    return parentItem.name;
   }
 
   public refresh(): void {
@@ -528,7 +512,7 @@ class ContentDataProvider
   ): Promise<void> {
     for (let i = 0; i < selections.length; ++i) {
       const selection = selections[i];
-      if (isContainer(selection)) {
+      if (getIsContainer(selection)) {
         const newFolderUri = Uri.joinPath(folderUri, selection.name);
         const selectionsWithinFolder = await this.childrenSelections(
           selection,
@@ -565,26 +549,44 @@ class ContentDataProvider
     return this.getChildren(selection);
   }
 
+  private async moveItem(
+    item: ContentItem,
+    targetUri: string,
+  ): Promise<boolean> {
+    if (!targetUri) {
+      return false;
+    }
+
+    const closing = closeFileIfOpen(item);
+    if (!(await closing)) {
+      return false;
+    }
+
+    const newUri = await this.model.moveTo(item, targetUri);
+    if (closing !== true) {
+      commands.executeCommand("vscode.open", newUri);
+    }
+
+    return !!newUri;
+  }
+
   private async handleContentItemDrop(
     target: ContentItem,
     item: ContentItem,
   ): Promise<void> {
     let success = false;
     let message = Messages.FileDropError;
-    if (item.flags.isInRecycleBin) {
+    if (item.flags?.isInRecycleBin) {
       message = Messages.FileDragFromTrashError;
-    } else if (isReference(item)) {
+    } else if (item.isReference) {
       message = Messages.FileDragFromFavorites;
     } else if (target.type === TRASH_FOLDER_TYPE) {
       success = await this.recycleResource(item);
     } else if (target.type === FAVORITES_FOLDER_TYPE) {
       success = await this.addToMyFavorites(item);
     } else {
-      const targetUri = getResourceIdFromItem(target);
-      if (targetUri) {
-        success = await this.model.moveTo(item, targetUri);
-      }
-
+      const targetUri = target.resourceId;
+      success = await this.moveItem(item, targetUri);
       if (success) {
         this.refresh();
       }
@@ -692,11 +694,11 @@ class ContentDataProvider
 
   private iconPathForItem(
     item: ContentItem,
-  ): ThemeIcon | { light: Uri; dark: Uri } {
+  ): undefined | { light: Uri; dark: Uri } {
     const isContainer = getIsContainer(item);
     let icon = "";
     if (isContainer) {
-      const type = getTypeName(item);
+      const type = item.typeName;
       switch (type) {
         case ROOT_FOLDER_TYPE:
           icon = "sasFolders";
@@ -707,16 +709,18 @@ class ContentDataProvider
         case FAVORITES_FOLDER_TYPE:
           icon = "favoritesFolder";
           break;
+        case SERVER_HOME_FOLDER_TYPE:
+          icon = "userWorkspace";
+          break;
+        case SERVER_ROOT_FOLDER_TYPE:
+          icon = "server";
+          break;
         default:
           icon = "folder";
           break;
       }
-    } else {
-      const extension = item.name.split(".").pop().toLowerCase();
-      if (extension === "sas") {
-        icon = "sasProgramFile";
-      }
     }
+
     return icon !== ""
       ? {
           dark: Uri.joinPath(this.extensionUri, `icons/dark/${icon}Dark.svg`),
@@ -725,23 +729,32 @@ class ContentDataProvider
             `icons/light/${icon}Light.svg`,
           ),
         }
-      : ThemeIcon.File;
+      : undefined;
   }
 }
 
 export default ContentDataProvider;
 
-const closeFileIfOpen = (item: ContentItem) => {
-  const fileUri = getUri(item, isItemInRecycleBin(item));
-  const tabs: Tab[] = window.tabGroups.all.map((tg) => tg.tabs).flat();
-  const tab = tabs.find(
-    (tab) =>
-      (tab.input instanceof TabInputText ||
-        tab.input instanceof TabInputNotebook) &&
-      tab.input.uri.query === fileUri.query, // compare the file id
-  );
-  if (tab) {
-    return window.tabGroups.close(tab);
+const closeFileIfOpen = (item: ContentItem): Promise<Uri[]> | boolean => {
+  const tabs = getEditorTabsForItem(item);
+  if (tabs.length > 0) {
+    return new Promise((resolve, reject) => {
+      Promise.all(tabs.map((tab) => window.tabGroups.close(tab)))
+        .then(() =>
+          resolve(
+            tabs
+              .map(
+                (tab) =>
+                  (tab.input instanceof TabInputText ||
+                    tab.input instanceof TabInputNotebook) &&
+                  tab.input.uri,
+              )
+              .filter((exists) => exists),
+          ),
+        )
+        .catch(reject);
+    });
   }
+
   return true;
 };

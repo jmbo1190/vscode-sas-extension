@@ -1,6 +1,6 @@
 // Copyright © 2023, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { createElement, useMemo } from "react";
+import { useMemo } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AgGridReact } from "ag-grid-react";
@@ -46,12 +46,13 @@ const DataViewer = () => {
         cacheBlockSize={100}
         columnDefs={columns}
         defaultColDef={{
-          resizable: true,
+          sortable: false,
         }}
         infiniteInitialRowCount={100}
         maxBlocksInCache={10}
         onGridReady={onGridReady}
         rowModelType="infinite"
+        theme="legacy"
       />
     </div>
   );

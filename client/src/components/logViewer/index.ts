@@ -8,9 +8,11 @@ import {
   window,
 } from "vscode";
 
+import type { OnLogFn } from "../../connection";
 import { useLogStore, useRunStore } from "../../store";
 import { logSelectors, runSelectors } from "../../store/selectors";
 import {
+  clearLogOnExecutionStart,
   showLogOnExecutionFinish,
   showLogOnExecutionStart,
 } from "../utils/settings";
@@ -19,6 +21,7 @@ const { setProducedExecutionLogOutput } = useLogStore.getState();
 
 let outputChannel: OutputChannel;
 let data: string[] = [];
+let fileName = "";
 
 export const legend = {
   tokenTypes: ["error", "warning", "note"],
@@ -45,7 +48,7 @@ export const LogTokensProvider: DocumentSemanticTokensProvider = {
  * Handles log lines generated for the SAS session startup.
  * @param logs array of log lines to write.
  */
-export const appendSessionLogFn = (logLines) => {
+export const appendSessionLogFn: OnLogFn = (logLines) => {
   appendLogLines(logLines);
 };
 
@@ -53,7 +56,7 @@ export const appendSessionLogFn = (logLines) => {
  * Handles log lines generated for the SAS session execution.
  * @param logs array of log lines to write.
  */
-export const appendExecutionLogFn = (logLines) => {
+export const appendExecutionLogFn: OnLogFn = (logLines) => {
   appendLogLines(logLines);
 
   if (!useLogStore.getState().producedExecutionOutput) {
@@ -65,13 +68,25 @@ export const appendLogToken = (type: string): void => {
   data.push(type);
 };
 
-const appendLogLines = (logs) => {
+export const setFileName = (name: string) => {
+  fileName = name;
+};
+
+const appendLogLines: OnLogFn = (logs) => {
   if (!outputChannel) {
-    outputChannel = window.createOutputChannel(l10n.t("SAS Log"), "sas-log");
+    const name = clearLogOnExecutionStart()
+      ? l10n.t("SAS Log: {name}", { name: fileName })
+      : l10n.t("SAS Log");
+    outputChannel = window.createOutputChannel(name, "sas-log");
   }
   for (const line of logs) {
-    appendLogToken(line.type);
-    outputChannel.appendLine(line.line);
+    line.line
+      .trimEnd()
+      .split("\n")
+      .forEach((text) => {
+        appendLogToken(line.type);
+        outputChannel.appendLine(text);
+      });
   }
 };
 
@@ -99,6 +114,16 @@ useRunStore.subscribe(
       }
     } else if (isExecuting && !prevIsExecuting) {
       setProducedExecutionLogOutput(false);
+
+      if (
+        clearLogOnExecutionStart() &&
+        outputChannel &&
+        useRunStore.getState().isUserExecuting
+      ) {
+        outputChannel.dispose();
+        outputChannel = undefined;
+        data = [];
+      }
     }
   },
 );

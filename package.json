@@ -2,7 +2,7 @@
   "name": "sas-lsp",
   "displayName": "SAS",
   "description": "Official SAS Language Extension for VS Code",
-  "version": "1.7.1",
+  "version": "1.13.1",
   "categories": [
     "Programming Languages",
     "Data Science",
@@ -13,9 +13,10 @@
   "license": "Apache-2.0",
   "icon": "icons/sas.png",
   "engines": {
-    "vscode": "^1.82.0"
+    "vscode": "^1.89.0"
   },
   "activationEvents": [
+    "onWebviewPanel:SASResultPanel",
     "onLanguage:sas",
     "onNotebook:sas-notebook"
   ],
@@ -29,6 +30,12 @@
     "virtualWorkspaces": true
   },
   "contributes": {
+    "authentication": [
+      {
+        "id": "SAS",
+        "label": "SAS"
+      }
+    ],
     "taskDefinitions": [
       {
         "type": "sas",
@@ -320,6 +327,11 @@
                             "description": "%configuration.SAS.connectionProfiles.profiles.ssh.port%",
                             "exclusiveMinimum": 1,
                             "exclusiveMaximum": 65535
+                          },
+                          "privateKeyFilePath": {
+                            "type": "string",
+                            "default": "",
+                            "description": "%configuration.SAS.connectionProfiles.profiles.ssh.privateKeyFilePath%"
                           }
                         }
                       }
@@ -443,6 +455,11 @@
             ],
             "description": "%configuration.SAS.results.html.style%"
           },
+          "SAS.problems.log.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "%configuration.SAS.problems.log.enabled%"
+          },
           "SAS.flowConversionMode": {
             "order": 6,
             "type": "string",
@@ -468,6 +485,12 @@
             "type": "boolean",
             "default": true,
             "description": "%configuration.SAS.log.showOnExecutionFinish%"
+          },
+          "SAS.log.clearOnExecutionStart": {
+            "order": 9,
+            "type": "boolean",
+            "default": true,
+            "description": "%configuration.SAS.log.clearOnExecutionStart%"
           }
         }
       }
@@ -545,67 +568,164 @@
         "category": "SAS"
       },
       {
-        "command": "SAS.deleteResource",
+        "command": "SAS.content.deleteResource",
         "title": "%commands.SAS.deleteResource%",
         "category": "SAS"
       },
       {
-        "command": "SAS.addFileResource",
+        "command": "SAS.content.addFileResource",
         "title": "%commands.SAS.addFileResource%",
         "category": "SAS"
       },
       {
-        "command": "SAS.addFolderResource",
+        "command": "SAS.content.addFolderResource",
         "title": "%commands.SAS.addFolderResource%",
         "category": "SAS"
       },
       {
-        "command": "SAS.renameResource",
+        "command": "SAS.content.renameResource",
         "title": "%commands.SAS.renameResource%",
         "category": "SAS"
       },
       {
-        "command": "SAS.restoreResource",
+        "command": "SAS.content.restoreResource",
         "title": "%commands.SAS.restoreResource%",
         "category": "SAS"
       },
       {
-        "command": "SAS.emptyRecycleBin",
+        "command": "SAS.content.emptyRecycleBin",
         "title": "%commands.SAS.emptyRecycleBin%",
         "category": "SAS"
       },
       {
-        "command": "SAS.addToFavorites",
+        "command": "SAS.content.addToFavorites",
         "title": "%commands.SAS.addToFavorites%",
         "category": "SAS"
       },
       {
-        "command": "SAS.convertNotebookToFlow",
+        "command": "SAS.content.convertNotebookToFlow",
         "title": "%commands.SAS.convertNotebookToFlow%",
         "category": "SAS"
       },
       {
-        "command": "SAS.removeFromFavorites",
+        "command": "SAS.content.removeFromFavorites",
         "title": "%commands.SAS.removeFromFavorites%",
         "category": "SAS"
       },
       {
-        "command": "SAS.refreshContent",
+        "command": "SAS.content.refreshContent",
         "title": "%commands.SAS.refresh%",
         "category": "SAS",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "SAS.content.collapseAllContent",
+        "title": "%commands.SAS.collapseAll%",
+        "category": "SAS",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "SAS.content.downloadResource",
+        "title": "%commands.SAS.download%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.content.uploadResource",
+        "title": "%commands.SAS.upload%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.content.uploadFileResource",
+        "title": "%commands.SAS.uploadFiles%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.content.uploadFolderResource",
+        "title": "%commands.SAS.uploadFolders%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.deleteResource",
+        "title": "%commands.SAS.deleteResource%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.addFileResource",
+        "title": "%commands.SAS.addFileResource%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.addFolderResource",
+        "title": "%commands.SAS.addFolderResource%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.renameResource",
+        "title": "%commands.SAS.renameResource%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.restoreResource",
+        "title": "%commands.SAS.restoreResource%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.emptyRecycleBin",
+        "title": "%commands.SAS.emptyRecycleBin%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.addToFavorites",
+        "title": "%commands.SAS.addToFavorites%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.convertNotebookToFlow",
+        "title": "%commands.SAS.convertNotebookToFlow%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.removeFromFavorites",
+        "title": "%commands.SAS.removeFromFavorites%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.refreshContent",
+        "title": "%commands.SAS.refresh%",
+        "category": "SAS",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "SAS.server.collapseAllContent",
+        "title": "%commands.SAS.collapseAll%",
+        "category": "SAS",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "SAS.server.downloadResource",
+        "title": "%commands.SAS.download%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.uploadResource",
+        "title": "%commands.SAS.upload%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.uploadFileResource",
+        "title": "%commands.SAS.uploadFiles%",
+        "category": "SAS"
+      },
+      {
+        "command": "SAS.server.uploadFolderResource",
+        "title": "%commands.SAS.uploadFolders%",
+        "category": "SAS"
       },
       {
         "command": "SAS.refreshLibraries",
         "title": "%commands.SAS.refresh%",
         "category": "SAS",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "SAS.collapseAllContent",
-        "title": "%commands.SAS.collapseAll%",
-        "category": "SAS",
-        "icon": "$(collapse-all)"
       },
       {
         "command": "SAS.collapseAllLibraries",
@@ -630,29 +750,14 @@
         "category": "SAS Notebook"
       },
       {
+        "command": "SAS.notebook.export",
+        "title": "%commands.SAS.notebook.export%",
+        "category": "SAS Notebook"
+      },
+      {
         "command": "SAS.file.new",
         "shortTitle": "%commands.SAS.file.new.short%",
         "title": "%commands.SAS.file.new%",
-        "category": "SAS"
-      },
-      {
-        "command": "SAS.downloadResource",
-        "title": "%commands.SAS.download%",
-        "category": "SAS"
-      },
-      {
-        "command": "SAS.uploadResource",
-        "title": "%commands.SAS.upload%",
-        "category": "SAS"
-      },
-      {
-        "command": "SAS.uploadFileResource",
-        "title": "%commands.SAS.uploadFiles%",
-        "category": "SAS"
-      },
-      {
-        "command": "SAS.uploadFolderResource",
-        "title": "%commands.SAS.uploadFolders%",
         "category": "SAS"
       },
       {
@@ -677,18 +782,28 @@
       "webview/context": [
         {
           "command": "SAS.saveHTML",
-          "when": "webviewId =~ /SASResultPanel-/"
+          "when": "webviewId =~ /SASResultPanel/"
         }
       ],
       "view/title": [
         {
-          "command": "SAS.refreshContent",
+          "command": "SAS.content.refreshContent",
           "when": "view == contentdataprovider",
           "group": "navigation@0"
         },
         {
-          "command": "SAS.collapseAllContent",
+          "command": "SAS.content.collapseAllContent",
           "when": "view == contentdataprovider",
+          "group": "navigation@1"
+        },
+        {
+          "command": "SAS.server.refreshContent",
+          "when": "view == serverdataprovider",
+          "group": "navigation@0"
+        },
+        {
+          "command": "SAS.server.collapseAllContent",
+          "when": "view == serverdataprovider",
           "group": "navigation@1"
         },
         {
@@ -704,7 +819,7 @@
       ],
       "explorer/context": [
         {
-          "command": "SAS.convertNotebookToFlow",
+          "command": "SAS.content.convertNotebookToFlow",
           "when": "resourceExtname == .sasnb && SAS.connectionType == rest && !SAS.connection.direct",
           "group": "actionsgroup@0"
         }
@@ -721,68 +836,133 @@
           "group": "download@0"
         },
         {
-          "command": "SAS.addFolderResource",
+          "command": "SAS.content.addFolderResource",
           "when": "viewItem =~ /createChild/ && view == contentdataprovider",
           "group": "addgroup@0"
         },
         {
-          "command": "SAS.addFileResource",
+          "command": "SAS.content.addFileResource",
           "when": "viewItem =~ /createChild/ && view == contentdataprovider",
           "group": "addgroup@1"
         },
         {
-          "command": "SAS.addToFavorites",
+          "command": "SAS.content.addToFavorites",
           "when": "viewItem =~ /addToFavorites/ && view == contentdataprovider",
           "group": "favoritesgroup@0"
         },
         {
-          "command": "SAS.removeFromFavorites",
+          "command": "SAS.content.removeFromFavorites",
           "when": "viewItem =~ /removeFromFavorites/ && view == contentdataprovider",
           "group": "favoritesgroup@1"
         },
         {
-          "command": "SAS.renameResource",
+          "command": "SAS.content.renameResource",
           "when": "viewItem =~ /update/ && view == contentdataprovider && !listMultiSelection",
           "group": "delrenamegroup@0"
         },
         {
-          "command": "SAS.deleteResource",
+          "command": "SAS.content.deleteResource",
           "when": "viewItem =~ /delete/ && view == contentdataprovider",
           "group": "delrenamegroup@1"
         },
         {
-          "command": "SAS.convertNotebookToFlow",
+          "command": "SAS.content.convertNotebookToFlow",
           "when": "viewItem =~ /convertNotebookToFlow/ && view == contentdataprovider",
           "group": "actionsgroup@0"
         },
         {
-          "command": "SAS.restoreResource",
+          "command": "SAS.content.restoreResource",
           "when": "viewItem =~ /restore/ && view == contentdataprovider",
           "group": "restoregroup@0"
         },
         {
-          "command": "SAS.emptyRecycleBin",
+          "command": "SAS.content.emptyRecycleBin",
           "when": "viewItem =~ /empty/ && view == contentdataprovider",
           "group": "emptygroup@0"
         },
         {
-          "command": "SAS.downloadResource",
+          "command": "SAS.content.downloadResource",
           "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider",
           "group": "uploaddownloadgroup@0"
         },
         {
-          "command": "SAS.uploadResource",
+          "command": "SAS.content.uploadResource",
           "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider && !listMultiSelection && workspacePlatform == mac",
           "group": "uploaddownloadgroup@1"
         },
         {
-          "command": "SAS.uploadFileResource",
+          "command": "SAS.content.uploadFileResource",
           "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider && !listMultiSelection && workspacePlatform != mac",
           "group": "uploaddownloadgroup@1"
         },
         {
-          "command": "SAS.uploadFolderResource",
+          "command": "SAS.content.uploadFolderResource",
           "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == contentdataprovider && !listMultiSelection && workspacePlatform != mac",
+          "group": "uploaddownloadgroup@1"
+        },
+        {
+          "command": "SAS.server.addFolderResource",
+          "when": "viewItem =~ /createChild/ && view == serverdataprovider",
+          "group": "addgroup@0"
+        },
+        {
+          "command": "SAS.server.addFileResource",
+          "when": "viewItem =~ /createChild/ && view == serverdataprovider",
+          "group": "addgroup@1"
+        },
+        {
+          "command": "SAS.server.addToFavorites",
+          "when": "viewItem =~ /addToFavorites/ && view == serverdataprovider",
+          "group": "favoritesgroup@0"
+        },
+        {
+          "command": "SAS.server.removeFromFavorites",
+          "when": "viewItem =~ /removeFromFavorites/ && view == serverdataprovider",
+          "group": "favoritesgroup@1"
+        },
+        {
+          "command": "SAS.server.renameResource",
+          "when": "viewItem =~ /update/ && view == serverdataprovider && !listMultiSelection",
+          "group": "delrenamegroup@0"
+        },
+        {
+          "command": "SAS.server.deleteResource",
+          "when": "viewItem =~ /delete/ && view == serverdataprovider",
+          "group": "delrenamegroup@1"
+        },
+        {
+          "command": "SAS.server.convertNotebookToFlow",
+          "when": "viewItem =~ /convertNotebookToFlow/ && view == serverdataprovider",
+          "group": "actionsgroup@0"
+        },
+        {
+          "command": "SAS.server.restoreResource",
+          "when": "viewItem =~ /restore/ && view == serverdataprovider",
+          "group": "restoregroup@0"
+        },
+        {
+          "command": "SAS.server.emptyRecycleBin",
+          "when": "viewItem =~ /empty/ && view == serverdataprovider",
+          "group": "emptygroup@0"
+        },
+        {
+          "command": "SAS.server.downloadResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == serverdataprovider",
+          "group": "uploaddownloadgroup@0"
+        },
+        {
+          "command": "SAS.server.uploadResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == serverdataprovider && !listMultiSelection && workspacePlatform == mac",
+          "group": "uploaddownloadgroup@1"
+        },
+        {
+          "command": "SAS.server.uploadFileResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == serverdataprovider && !listMultiSelection && workspacePlatform != mac",
+          "group": "uploaddownloadgroup@1"
+        },
+        {
+          "command": "SAS.server.uploadFolderResource",
+          "when": "(viewItem =~ /update/ || viewItem =~ /createChild/) && view == serverdataprovider && !listMultiSelection && workspacePlatform != mac",
           "group": "uploaddownloadgroup@1"
         }
       ],
@@ -809,6 +989,12 @@
           "group": "navigation@3"
         }
       ],
+      "notebook/toolbar": [
+        {
+          "when": "notebookType == 'sas-notebook'",
+          "command": "SAS.notebook.export"
+        }
+      ],
       "commandPalette": [
         {
           "when": "editorLangId == sas && !SAS.hideRunMenuItem",
@@ -828,39 +1014,39 @@
         },
         {
           "when": "false",
-          "command": "SAS.restoreResource"
+          "command": "SAS.content.restoreResource"
         },
         {
           "when": "false",
-          "command": "SAS.deleteResource"
+          "command": "SAS.content.deleteResource"
         },
         {
           "when": "false",
-          "command": "SAS.convertNotebookToFlow"
+          "command": "SAS.content.convertNotebookToFlow"
         },
         {
           "when": "false",
-          "command": "SAS.addFileResource"
+          "command": "SAS.content.addFileResource"
         },
         {
           "when": "false",
-          "command": "SAS.addFolderResource"
+          "command": "SAS.content.addFolderResource"
         },
         {
           "when": "false",
-          "command": "SAS.addToFavorites"
+          "command": "SAS.content.addToFavorites"
         },
         {
           "when": "false",
-          "command": "SAS.removeFromFavorites"
+          "command": "SAS.content.removeFromFavorites"
         },
         {
           "when": "false",
-          "command": "SAS.renameResource"
+          "command": "SAS.content.renameResource"
         },
         {
           "when": "false",
-          "command": "SAS.refreshContent"
+          "command": "SAS.content.refreshContent"
         },
         {
           "when": "false",
@@ -868,7 +1054,7 @@
         },
         {
           "when": "false",
-          "command": "SAS.collapseAllContent"
+          "command": "SAS.content.collapseAllContent"
         },
         {
           "when": "false",
@@ -884,23 +1070,27 @@
         },
         {
           "when": "false",
-          "command": "SAS.downloadResource"
+          "command": "SAS.content.downloadResource"
         },
         {
           "when": "false",
-          "command": "SAS.uploadResource"
+          "command": "SAS.content.uploadResource"
         },
         {
           "when": "false",
-          "command": "SAS.uploadFileResource"
+          "command": "SAS.content.uploadFileResource"
         },
         {
           "when": "false",
-          "command": "SAS.uploadFolderResource"
+          "command": "SAS.content.uploadFolderResource"
         },
         {
           "when": "false",
           "command": "SAS.saveHTML"
+        },
+        {
+          "when": "false",
+          "command": "SAS.notebook.export"
         }
       ],
       "file/newFile": [
@@ -931,6 +1121,25 @@
       },
       {
         "id": "sas-log"
+      }
+    ],
+    "grammars": [
+      {
+        "scopeName": "source.sassql",
+        "path": "./syntaxes/sassql.tmLanguage.json",
+        "injectTo": [
+          "source.sas"
+        ]
+      },
+      {
+        "language": "sas",
+        "scopeName": "source.sas",
+        "path": "./syntaxes/sas.tmLanguage.json",
+        "embeddedLanguages": {
+          "source.python": "python",
+          "source.lua": "lua",
+          "source.sql": "sql"
+        }
       }
     ],
     "themes": [
@@ -973,32 +1182,35 @@
           "when": "SAS.authorized && SAS.connectionType == rest"
         },
         {
+          "id": "serverdataprovider",
+          "name": "%views.SAS.serverExplorer%",
+          "when": "SAS.authorized && SAS.connectionType == rest"
+        },
+        {
           "id": "librarydataprovider",
           "name": "%views.SAS.libraries%",
-          "when": "(SAS.authorized && SAS.connectionType == rest) || SAS.connection.direct"
+          "when": "((SAS.authorized || SAS.librariesDisplayed) && SAS.librariesEnabled) || SAS.connection.direct"
         },
         {
           "id": "sas-content-get-started",
           "name": "%views.SAS.signIn%",
-          "when": "(!SAS.authorized && SAS.connectionType == rest) && !SAS.connection.direct"
+          "when": "(!(SAS.authorized || SAS.librariesDisplayed) && SAS.canSignIn) && !SAS.connection.direct"
         },
         {
           "id": "sas-content-invalid-connection",
           "name": "%views.SAS.signIn%",
-          "when": "!SAS.authorized && SAS.connectionType != rest"
+          "when": "!SAS.authorized && !SAS.canSignIn"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "sas-content-get-started",
-        "when": "(!SAS.authorized && SAS.connectionType == rest) && !SAS.connection.direct",
         "contents": "%views.SAS.welcome%",
         "enablement": "!SAS.authorizing"
       },
       {
         "view": "sas-content-invalid-connection",
-        "when": "SAS.connectionType != rest",
         "contents": "%views.SAS.unsupportedConnection%"
       }
     ],
@@ -1051,37 +1263,44 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "pretest": "npm run compile && tsc -p ./client",
-    "test": "node ./client/out/test/runTest.js",
+    "test-client": "node ./client/out/test/runTest.js",
+    "test-server": "cross-env TS_NODE_PROJECT=./server/tsconfig.json mocha -r ts-node/register ./server/test/**/*.test.ts",
+    "test": "npm run test-server && npm run test-client",
     "pseudoLocalize": "npx @vscode/l10n-dev export -o ./l10n ./client/src && npx @vscode/l10n-dev generate-pseudo -o ./l10n/ ./l10n/bundle.l10n.json ./package.nls.json",
     "postinstall": "cd client && npm install && cd ../server && npm install && cd ..",
     "copyright:check": "node ./tools/check-copyright.mjs",
     "locale": "npx @vscode/l10n-dev export -o ./l10n ./client/src && node ./tools/locale.mjs"
   },
   "devDependencies": {
+    "@eslint/compat": "1.2.2",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/chai": "^4.3.11",
-    "@types/mocha": "^10.0.6",
-    "@types/node": "^20.11.24",
-    "@types/sinon": "^17.0.3",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.1.1",
-    "@vscode/l10n-dev": "^0.0.34",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.13.8",
+    "@types/sinon": "^17.0.4",
+    "@typescript-eslint/eslint-plugin": "^8.25.0",
+    "@typescript-eslint/parser": "^8.25.0",
+    "@vscode/l10n-dev": "^0.0.35",
+    "buffer": "6.0.3",
     "chai": "^4.4.1",
-    "concurrently": "^8.2.2",
-    "esbuild": "^0.20.1",
-    "eslint": "^8.57.0",
-    "eslint-plugin-react": "^7.34.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "mocha": "^10.3.0",
-    "nock": "^13.5.4",
+    "concurrently": "^9.1.0",
+    "esbuild": "^0.25.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.21.0",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "glob": "^7.2.0",
+    "mocha": "^11.0.1",
+    "nock": "^13.5.5",
     "papaparse": "^5.4.1",
     "path-browserify": "^1.0.1",
-    "prettier": "^3.2.5",
-    "sinon": "^17.0.1",
-    "ts-loader": "^9.5.1",
+    "prettier": "^3.3.3",
+    "sinon": "^19.0.2",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
     "ts-sinon": "^2.0.2",
-    "typescript": "^5.3.3",
-    "webpack": "^5.90.3",
-    "webpack-cli": "^5.1.4"
+    "typescript": "^5.5.3",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^6.0.1"
   }
 }

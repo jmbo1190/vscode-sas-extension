@@ -1,7 +1,7 @@
 // Copyright © 2022, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-/* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/no-unused-vars, @typescript-eslint/consistent-type-assertions */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions */
 import {
   CompletionItem,
   CompletionItemKind,
@@ -162,7 +162,6 @@ function _cleanUpKeyword(keyword: string) {
   }
   keyword = keyword.replace(/(^\s+|\s+$)/g, "");
   if (/^(TITLE|FOOTNOTE|AXIS|LEGEND|PATTERN|SYMBOL)\d{0,}$/i.test(keyword)) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const results = keyword.match(
       /^(TITLE|FOOTNOTE|AXIS|LEGEND|PATTERN|SYMBOL)|\d{0,}$/gi,
     )!;
@@ -279,6 +278,10 @@ export class CompletionProvider {
     this.czMgr = new CodeZoneManager(model, this.loader, syntaxProvider);
   }
 
+  getCodeZoneManager(): CodeZoneManager {
+    return this.czMgr;
+  }
+
   getHelp(position: Position): Promise<Hover | undefined> | undefined {
     const line = this.model.getLine(position.line);
     const tokens = this.syntaxProvider.getSyntax(position.line);
@@ -295,6 +298,10 @@ export class CompletionProvider {
           position.character,
         );
         return new Promise((resolve) => {
+          if (keyword.trim() === "") {
+            resolve(undefined);
+            return;
+          }
           this._loadHelp({
             keyword: keyword,
             type: "hint",
@@ -605,9 +612,7 @@ export class CompletionProvider {
     });
   }
 
-  getCompleteItems(
-    position: Position,
-  ): Promise<CompletionItem[] | CompletionList | undefined> {
+  getCompleteItems(position: Position): Promise<CompletionList | undefined> {
     return new Promise((resolve) => {
       this._getZone(position);
       const prefix = this.popupContext.prefix;
@@ -679,20 +684,36 @@ export class CompletionProvider {
 
   getCompleteItemHelp(item: CompletionItem): Promise<CompletionItem> {
     return new Promise((resolve) => {
-      this._loadHelp({
-        keyword: item.label,
-        type: "tooltip",
-        ...this.popupContext,
-        cb: (data) => {
-          if (data && data.data) {
-            item.documentation = {
-              kind: MarkupKind.Markdown,
-              value: this._addLinkContext(this.popupContext.zone, data),
-            };
-          }
-          resolve(item);
-        },
-      });
+      if (["endsubmit", "endinteractive"].includes(item.label?.toLowerCase())) {
+        this.loader.getProcedureStatementHelp(
+          "PYTHON",
+          item.label.toUpperCase(),
+          (data) => {
+            if (data && data.data) {
+              item.documentation = {
+                kind: MarkupKind.Markdown,
+                value: this._addLinkContext(515, data),
+              };
+            }
+            resolve(item);
+          },
+        );
+      } else {
+        this._loadHelp({
+          keyword: item.label,
+          type: "tooltip",
+          ...this.popupContext,
+          cb: (data) => {
+            if (data && data.data) {
+              item.documentation = {
+                kind: MarkupKind.Markdown,
+                value: this._addLinkContext(this.popupContext.zone, data),
+              };
+            }
+            resolve(item);
+          },
+        });
+      }
     });
   }
 
@@ -728,13 +749,16 @@ export class CompletionProvider {
         this.loader.getProcedureSubOptions(procName, optName, cb);
         break;
       case ZONE_TYPE.PROC_STMT:
-        this.loader.getProcedureStatements(procName, function (data) {
+        this.loader.getProcedureStatements(procName, false, (data) => {
           if (procName === "ODS") {
             cb(_cleanUpODSStmts(data));
           } else {
             cb(data);
           }
         });
+        break;
+      case ZONE_TYPE.EMBEDDED_LANG:
+        this.loader.getProcedureStatements(procName, true, cb);
         break;
       case ZONE_TYPE.PROC_STMT_OPT:
       case ZONE_TYPE.PROC_STMT_OPT_REQ:
@@ -1119,6 +1143,12 @@ export class CompletionProvider {
           cb,
         );
         break;
+      case ZONE_TYPE.EMBEDDED_LANG:
+        if (cb) {
+          _notify(cb, undefined);
+        }
+
+        break;
       case ZONE_TYPE.GBL_STMT_SUB_OPT_NAME:
         help = this.loader.getStatementSubOptionHelp(
           "global",
@@ -1187,8 +1217,7 @@ export class CompletionProvider {
           "datastep",
           context.stmtName,
           keyword,
-          cb,
-        );
+        ); // always sync
         if (help) {
           _notify(cb, help);
         } else {
@@ -1203,7 +1232,8 @@ export class CompletionProvider {
               "DATA",
               context.stmtName,
               keyword,
-            ); // always sync
+              cb,
+            );
           }
         }
         break;
@@ -1477,6 +1507,10 @@ export class CompletionProvider {
         contextText = getText("ce_ac_data_step_txt");
         linkTail = "%22DATA+STEP%22+%22" + keyword + "+" + "STATEMENT%22";
         break;
+      case ZONE_TYPE.DATA_STEP_STMT_OPT:
+        contextText = getText("ce_ac_statement.fmt", context.stmtName);
+        linkTail = "%22" + context.stmtName + "+STATEMENT%22+" + keyword;
+        break;
       case ZONE_TYPE.DATA_STEP_OPT_NAME:
       case ZONE_TYPE.DATA_STEP_DEF_OPT:
         contextText = getText("ce_ac_data_step_txt");
@@ -1670,7 +1704,7 @@ export class CompletionProvider {
 
   private _notifyOptValue(
     cb: (data?: (string | LibCompleteItem)[]) => void,
-    data: OptionValues,
+    data: OptionValues | undefined,
     optName: string,
   ) {
     if (data) {

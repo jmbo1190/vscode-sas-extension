@@ -3,7 +3,6 @@ import {
   DataTransferItem,
   FileStat,
   FileType,
-  ThemeIcon,
   TreeItem,
   Uri,
   authentication,
@@ -21,51 +20,71 @@ import {
   ROOT_FOLDER,
   TRASH_FOLDER_TYPE,
 } from "../../../src/components/ContentNavigator/const";
-import { ContentItem } from "../../../src/components/ContentNavigator/types";
 import {
-  getLink,
-  getUri,
-} from "../../../src/components/ContentNavigator/utils";
+  ContentItem,
+  ContentSourceType,
+} from "../../../src/components/ContentNavigator/types";
+import SASContentAdapter from "../../../src/connection/rest/SASContentAdapter";
+import { getSasContentUri as getUri } from "../../../src/connection/rest/util";
 import { getUri as getTestUri } from "../../utils";
 
 let stub;
 let axiosInstance: StubbedInstance<AxiosInstance>;
 
+const defaultConfig = {
+  mimeType: "application/vnd.code.tree.contentdataprovider",
+  sourceType: ContentSourceType.SASContent,
+  treeIdentifier: "contentdataprovider",
+};
+
 const mockContentItem = (
-  contentItem: Partial<ContentItem> = {},
-): ContentItem => ({
-  id: "abc123",
-  type: "file",
-  creationTimeStamp: 1234,
-  links: [
-    {
-      rel: "self",
-      uri: "uri://self",
-      method: "GET",
-      href: "uri://self",
-      type: "test",
+  initialContentItem: Partial<ContentItem> = {},
+): ContentItem => {
+  const contentItem = {
+    id: "abc123",
+    type: "file",
+    fileStat: {
+      type: FileType.File,
+      ctime: 1234,
+      mtime: 1234,
+      size: 0,
     },
-  ],
-  modifiedTimeStamp: 1234,
-  name: "testFile",
-  uri: "uri://test",
-  permission: {
-    write: false,
-    addMember: false,
-    delete: false,
-  },
-  flags: {
-    isInRecycleBin: false,
-    isInMyFavorites: false,
-  },
-  uid: "unique-id",
-  ...contentItem,
-});
+    creationTimeStamp: 1234,
+    links: [
+      {
+        rel: "self",
+        uri: "uri://self",
+        method: "GET",
+        href: "uri://self",
+        type: "test",
+      },
+    ],
+    modifiedTimeStamp: 1234,
+    name: "testFile",
+    uri: "uri://test",
+    permission: {
+      write: false,
+      addMember: false,
+      delete: false,
+    },
+    flags: {
+      isInRecycleBin: false,
+      isInMyFavorites: false,
+    },
+    uid: "unique-id",
+    ...initialContentItem,
+  };
+
+  return {
+    ...contentItem,
+    vscUri: getUri(contentItem),
+  };
+};
 
 const createDataProvider = () => {
-  const model = new ContentModel();
-  const mockGetDelegateFolder = sinon.stub(model, "getDelegateFolder");
-  mockGetDelegateFolder.withArgs("@myRecycleBin").returns(
+  const adapter = new SASContentAdapter();
+  const mockGetRootFolder = sinon.stub(adapter, "getRootFolder");
+  mockGetRootFolder.withArgs("@myRecycleBin").returns(
     mockContentItem({
       type: "trashFolder",
       name: "Recycle Bin",
@@ -81,7 +100,7 @@ const createDataProvider = () => {
       uri: "uri://recyleBin",
     }),
   );
-  mockGetDelegateFolder.withArgs("@myFavorites").returns(
+  mockGetRootFolder.withArgs("@myFavorites").returns(
     mockContentItem({
       type: "favoritesFolder",
       name: "My Favorites",
@@ -97,7 +116,12 @@ const createDataProvider = () => {
       uri: "uri://myFavorites",
     }),
   );
-  return new ContentDataProvider(model, Uri.from({ scheme: "http" }));
+
+  return new ContentDataProvider(
+    new ContentModel(adapter),
+    Uri.from({ scheme: "http" }),
+    defaultConfig,
+  );
 };
 
 describe("ContentDataProvider", async function () {
@@ -148,9 +172,8 @@ describe("ContentDataProvider", async function () {
     const dataProvider = createDataProvider();
 
     const treeItem = await dataProvider.getTreeItem(contentItem);
-    const uri = await dataProvider.getUri(contentItem, false);
+    const uri = contentItem.vscUri;
     const expectedTreeItem: TreeItem = {
-      iconPath: ThemeIcon.File,
       id: "unique-id",
       label: "testFile",
       command: {
@@ -158,6 +181,7 @@ describe("ContentDataProvider", async function () {
         arguments: [uri],
         title: "Open SAS File",
       },
+      resourceUri: uri,
     };
 
     expect(treeItem).to.deep.include(expectedTreeItem);
@@ -224,7 +248,6 @@ describe("ContentDataProvider", async function () {
       flags: {
         isInMyFavorites: true,
         isInRecycleBin: false,
-        hasFavoriteId: undefined,
       },
       uid: "my-favorite/0",
     });
@@ -427,6 +450,16 @@ describe("ContentDataProvider", async function () {
           status: 409,
         },
       });
+    axiosInstance.get
+      .withArgs(
+        "uri://myFavorites/members?limit=1000000&filter=in(contentType,'file','dataFlow','RootFolder','folder','myFolder','favoritesFolder','userFolder','userRoot','trashFolder')&sortBy=eq(contentType,'folder'):descending,name:primary:ascending,type:ascending",
+      )
+      .resolves({ data: { items: [] } });
+    axiosInstance.get
+      .withArgs(
+        "uri://test/members?limit=1000000&filter=in(contentType,'file','dataFlow','RootFolder','folder','myFolder','favoritesFolder','userFolder','userRoot','trashFolder')&sortBy=eq(contentType,'folder'):descending,name:primary:ascending,type:ascending",
+      )
+      .resolves({ data: [] });
 
     const dataProvider = createDataProvider();
 
@@ -455,12 +488,20 @@ describe("ContentDataProvider", async function () {
       data: origItem,
       headers: { etag: "1234", "last-modified": "5678" },
     });
-    axiosInstance.put
-      .withArgs("uri://rename", { ...origItem, name: "new-file.sas" })
-      .resolves({
-        data: { ...origItem, name: "new-file.sas" },
-        headers: { etag: "1234", "last-modified": "5678" },
-      });
+    axiosInstance.put.withArgs("uri://rename").resolves({
+      data: { ...origItem, name: "new-file.sas" },
+      headers: { etag: "1234", "last-modified": "5678" },
+    });
+    axiosInstance.get
+      .withArgs(
+        "uri://myFavorites/members?limit=1000000&filter=in(contentType,'file','dataFlow','RootFolder','folder','myFolder','favoritesFolder','userFolder','userRoot','trashFolder')&sortBy=eq(contentType,'folder'):descending,name:primary:ascending,type:ascending",
+      )
+      .resolves({ data: { items: [] } });
+    axiosInstance.get
+      .withArgs(
+        "uri://rename/members?limit=1000000&filter=in(contentType,'file','dataFlow','RootFolder','folder','myFolder','favoritesFolder','userFolder','userRoot','trashFolder')&sortBy=eq(contentType,'folder'):descending,name:primary:ascending,type:ascending",
+      )
+      .resolves({ data: { items: [] } });
 
     const dataProvider = createDataProvider();
 
@@ -469,6 +510,7 @@ describe("ContentDataProvider", async function () {
       origItem,
       "new-file.sas",
     );
+
     expect(uri).to.deep.equal(getUri(newItem));
   });
 
@@ -490,16 +532,24 @@ describe("ContentDataProvider", async function () {
       data: item,
       headers: { etag: "1234", "last-modified": "5678" },
     });
-    axiosInstance.put
-      .withArgs("uri://self", { ...item, name: "favorite-link.sas" })
-      .resolves({
-        data: { ...item, name: "favorite-link.sas" },
-        headers: { etag: "1234", "last-modified": "5678" },
-      });
+    axiosInstance.put.withArgs("uri://self").resolves({
+      data: { ...item, name: "favorite-link.sas" },
+      headers: { etag: "1234", "last-modified": "5678" },
+    });
     axiosInstance.get.withArgs("uri://rename").resolves({
       data: referencedFile,
       headers: { etag: "1234", "last-modified": "5678" },
     });
+    axiosInstance.get
+      .withArgs(
+        "uri://myFavorites/members?limit=1000000&filter=in(contentType,'file','dataFlow','RootFolder','folder','myFolder','favoritesFolder','userFolder','userRoot','trashFolder')&sortBy=eq(contentType,'folder'):descending,name:primary:ascending,type:ascending",
+      )
+      .resolves({ data: { items: [] } });
+    axiosInstance.get
+      .withArgs(
+        "uri://test/members?limit=1000000&filter=in(contentType,'file','dataFlow','RootFolder','folder','myFolder','favoritesFolder','userFolder','userRoot','trashFolder')&sortBy=eq(contentType,'folder'):descending,name:primary:ascending,type:ascending",
+      )
+      .resolves({ data: { items: [] } });
 
     await dataProvider.connect("http://test.io");
     const uri: Uri = await dataProvider.renameResource(
@@ -656,43 +706,17 @@ describe("ContentDataProvider", async function () {
     expect(success).to.equal(true);
   });
 
-  it("remove from favorites - Remove the reference of an item from My Favorites folder", async function () {
-    const item = mockContentItem({
-      type: "reference",
-      name: "file.sas",
-      links: [
-        {
-          rel: "delete",
-          uri: "uri://delete",
-          method: "DELETE",
-          href: "uri://delete",
-          type: "test",
-        },
-      ],
-      flags: {
-        isInMyFavorites: true,
-      },
-    });
-    const dataProvider = createDataProvider();
-
-    axiosInstance.delete.withArgs("uri://delete").resolves({ data: {} });
-
-    await dataProvider.connect("http://test.io");
-    const success = await dataProvider.removeFromMyFavorites(item);
-
-    expect(success).to.equal(true);
-  });
-
   it("remove from favorites - Remove the reference of an item from the resource", async function () {
     const item = mockContentItem({
       type: "file",
       name: "file.sas",
       flags: {
-        hasFavoriteId: "favorite-id",
+        favoriteUri: "uri://myFavorites/members/favorite-id",
       },
     });
     const dataProvider = createDataProvider();
 
+    axiosInstance.get.resolves({ data: { items: [item] } });
     axiosInstance.delete
       .withArgs("uri://myFavorites/members/favorite-id")
       .resolves({ data: {} });
@@ -712,12 +736,13 @@ describe("ContentDataProvider", async function () {
     const uri = getTestUri("SampleCode.sas").toString();
     const item = mockContentItem();
 
-    const model = new ContentModel();
+    const model = new ContentModel(new SASContentAdapter());
     const stub: sinon.SinonStub = sinon.stub(model, "createFile");
 
     const dataProvider = new ContentDataProvider(
       model,
       Uri.from({ scheme: "http" }),
+      defaultConfig,
     );
 
     const dataTransfer = new DataTransfer();
@@ -745,13 +770,14 @@ describe("ContentDataProvider", async function () {
     const uri = uriObject.toString();
     const item = mockContentItem();
 
-    const model = new ContentModel();
+    const model = new ContentModel(new SASContentAdapter());
     const createFileStub: sinon.SinonStub = sinon.stub(model, "createFile");
     const createFolderStub: sinon.SinonStub = sinon.stub(model, "createFolder");
 
     const dataProvider = new ContentDataProvider(
       model,
       Uri.from({ scheme: "http" }),
+      defaultConfig,
     );
 
     const dataTransfer = new DataTransfer();
@@ -774,18 +800,20 @@ describe("ContentDataProvider", async function () {
 
   it("handleDrop - allows dropping content items", async function () {
     const parentItem = mockContentItem({
-      type: "folder",
       name: "parent",
+      resourceId: "/resource-id",
+      type: "folder",
     });
     const item = mockContentItem();
 
-    const model = new ContentModel();
+    const model = new ContentModel(new SASContentAdapter());
     const stub: sinon.SinonStub = sinon.stub(model, "moveTo");
     stub.returns(new Promise((resolve) => resolve(true)));
 
     const dataProvider = new ContentDataProvider(
       model,
       Uri.from({ scheme: "http" }),
+      defaultConfig,
     );
 
     const dataTransfer = new DataTransfer();
@@ -797,7 +825,7 @@ describe("ContentDataProvider", async function () {
 
     await dataProvider.handleDrop(parentItem, dataTransfer);
 
-    expect(stub.calledWith(item, parentItem.uri)).to.be.true;
+    expect(stub.calledWith(item, "/resource-id")).to.be.true;
   });
 
   it("handleDrop - allows dropping content items to favorites", async function () {
@@ -827,15 +855,17 @@ describe("ContentDataProvider", async function () {
       ],
     });
 
-    const model = new ContentModel();
-    const stub: sinon.SinonStub = sinon.stub(model, "addMember");
+    const adapter = new SASContentAdapter();
+    const model = new ContentModel(adapter);
+    const stub: sinon.SinonStub = sinon.stub(adapter, "addChildItem");
     stub.returns(new Promise((resolve) => resolve(true)));
 
-    sinon.stub(model, "getDelegateFolder").returns(parentItem);
+    sinon.stub(adapter, "getRootFolder").returns(parentItem);
 
     const dataProvider = new ContentDataProvider(
       model,
       Uri.from({ scheme: "http" }),
+      defaultConfig,
     );
 
     const dataTransfer = new DataTransfer();
@@ -866,15 +896,19 @@ describe("ContentDataProvider", async function () {
     });
     const item = mockContentItem();
 
-    const model = new ContentModel();
-    const stub: sinon.SinonStub = sinon.stub(model, "moveTo");
-    stub.returns(new Promise((resolve) => resolve(true)));
+    const adapter = new SASContentAdapter();
+    const model = new ContentModel(adapter);
+    const stub: sinon.SinonStub = sinon.stub(model, "recycleResource");
+    stub.returns(
+      new Promise((resolve) => resolve({ newUri: "new", oldUri: "old" })),
+    );
 
-    sinon.stub(model, "getDelegateFolder").returns(parentItem);
+    sinon.stub(adapter, "getRootFolder").returns(parentItem);
 
     const dataProvider = new ContentDataProvider(
       model,
       Uri.from({ scheme: "http" }),
+      defaultConfig,
     );
 
     const dataTransfer = new DataTransfer();
@@ -886,8 +920,7 @@ describe("ContentDataProvider", async function () {
 
     await dataProvider.handleDrop(parentItem, dataTransfer);
 
-    expect(stub.calledWith(item, getLink(parentItem.links, "GET", "self")?.uri))
-      .to.be.true;
+    expect(stub.calledWith(item)).to.be.true;
   });
 
   it("getFileFolderPath - returns empty path for folder", async function () {
@@ -896,10 +929,11 @@ describe("ContentDataProvider", async function () {
       name: "folder",
     });
 
-    const model = new ContentModel();
+    const model = new ContentModel(new SASContentAdapter());
     const dataProvider = new ContentDataProvider(
       model,
       Uri.from({ scheme: "http" }),
+      defaultConfig,
     );
 
     await dataProvider.connect("http://test.io");
@@ -931,10 +965,11 @@ describe("ContentDataProvider", async function () {
       parentFolderUri: "/id/parent",
     });
 
-    const model = new ContentModel();
+    const model = new ContentModel(new SASContentAdapter());
     const dataProvider = new ContentDataProvider(
       model,
       Uri.from({ scheme: "http" }),
+      defaultConfig,
     );
 
     axiosInstance.get.withArgs("/id/parent").resolves({

@@ -1,9 +1,13 @@
 // Copyright © 2022-2023, SAS Institute Inc., Cary, NC, USA.  All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { FoldingRange } from "vscode-languageserver";
+import {
+  DocumentSymbol,
+  FoldingRange,
+  SymbolKind,
+} from "vscode-languageserver";
 import { Range, TextDocument } from "vscode-languageserver-textdocument";
-import { DocumentSymbol, SymbolKind } from "vscode-languageserver-types";
 
+import { CodeZoneManager } from "./CodeZoneManager";
 import { CompletionProvider } from "./CompletionProvider";
 import { FormatOnTypeProvider } from "./FormatOnTypeProvider";
 import { FoldingBlock } from "./LexerEx";
@@ -51,8 +55,8 @@ const SymbolKinds = [
 ];
 
 export class LanguageServiceProvider {
-  private model;
-  private syntaxProvider;
+  public model;
+  public syntaxProvider;
   public completionProvider;
   public formatOnTypeProvider;
   public formatter;
@@ -96,6 +100,10 @@ export class LanguageServiceProvider {
         },
       },
     });
+  }
+
+  getCodeZoneManager(): CodeZoneManager {
+    return this.completionProvider.getCodeZoneManager();
   }
 
   getTokens(): number[] {
@@ -162,7 +170,7 @@ export class LanguageServiceProvider {
       end: { line: block.endFoldingLine, character: block.endFoldingCol },
     };
     const docSymbol: DocumentSymbol = {
-      name: block.type === 1 ? this._getProcName(block.startLine) : block.name,
+      name: this.syntaxProvider.getSymbolName(block),
       kind: SymbolKinds[block.type],
       range,
       selectionRange: range,
@@ -237,28 +245,5 @@ export class LanguageServiceProvider {
 
   setLibService(fn: LibService): void {
     return this.syntaxProvider.lexer.syntaxDb.setLibService(fn);
-  }
-
-  private _getProcName(line: number) {
-    const tokens = this.syntaxProvider.getSyntax(line);
-    for (let i = 0; i < tokens.length; i++) {
-      const token = tokens[i];
-      if (token.style === "proc-name") {
-        const end =
-          i === tokens.length - 1
-            ? this.model.getColumnCount(line)
-            : tokens[i + 1].start;
-        return (
-          "PROC " +
-          this.model
-            .getText({
-              start: { line, column: token.start },
-              end: { line, column: end },
-            })
-            .toUpperCase()
-        );
-      }
-    }
-    return "";
   }
 }

@@ -25,3 +25,11 @@ export function showLogOnExecutionStart(): boolean {
 export function showLogOnExecutionFinish(): boolean {
   return workspace.getConfiguration("SAS").get("log.showOnExecutionFinish");
 }
+
+export function clearLogOnExecutionStart(): boolean {
+  return workspace.getConfiguration("SAS").get("log.clearOnExecutionStart");
+}
+
+export function isShowProblemsFromSASLogEnabled(): boolean {
+  return workspace.getConfiguration("SAS").get("problems.log.enabled");
+}
