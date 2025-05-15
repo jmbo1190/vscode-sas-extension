@@ -64,6 +64,8 @@ export let extensionContext: ExtensionContext | undefined;
 export function activate(context: ExtensionContext): void {
   // The server is implemented in node
   extensionContext = context;
+  global.sasExtContext = context;
+  console.warn(`typeof global.sasExtContext: ${typeof global.sasExtContext}`);
   const serverModule = context.asAbsolutePath(
     path.join("server", "dist", "node", "server.js"),
   );
